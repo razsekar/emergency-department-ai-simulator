@@ -1,86 +1,159 @@
 # Database
 
-PostgreSQL 16 (`pgvector/pgvector:pg16`), one instance, one schema per module, one coordinated
-Alembic history in `backend/migrations/`.
+PostgreSQL 16 with pgvector (`pgvector/pgvector:pg16`), one instance, **one schema per module**, one coordinated Alembic
+history in `backend/migrations/versions/`. Everything below is taken from those migration files.
 
-## Implemented (migration 0001)
-- Extension `vector`
-- Schemas: identity, simulation, patient_queue, resource_management, analytics, knowledge_base,
-  rag, ai_orchestration, agent_tools, model_providers, audit
+All data in the application tables is synthetic. Patient identifiers look like `SIM-PAT-001`.
 
-## Planned tables (by owner)
-| Schema | Tables |
-|---|---|
-| identity | users, roles, user_roles, permissions |
-| simulation | scenarios, scenario_parameters, scenario_runs, data_state (data_version) |
-| resource_management | departments, staff, beds, investigation_facilities |
-| patient_queue | patient_visits, investigation_requests |
-| knowledge_base | knowledge_documents |
-| rag | document_chunks (`vector(384)`, HNSW cosine index) |
-| ai_orchestration | chat_sessions, chat_messages, analysis_runs, ai_comparison_runs |
-| agent_tools | agent_execution_logs |
-| model_providers | model_configurations (env var names only, never secrets) |
-| audit | audit_events |
+## Conventions
 
-Conventions: UUID primary keys, `created_at`/`updated_at`, FKs only within a schema,
-opaque UUIDs across schemas.
+- UUID primary keys (`gen_random_uuid()`), `created_at` / `updated_at` (`timestamptz`, default `now()`) on most tables.
+- Foreign keys exist **only inside one schema**. References across schemas are opaque values (a UUID or a text reference), never
+  foreign keys, so each module could be extracted later. Exceptions in practice: none found in the migrations.
+- Each module writes only its own schema. Enforced by a regex-based architecture test, not by database privileges.
+- Extension: `vector` (created in migration 0001).
 
-Migration commands (in the backend container): `alembic upgrade head`, `alembic downgrade base`.
+## Migration history
 
-## Identity and audit (migration 0400, branch label `identity`)
-- `identity.users` (username unique, scrypt `password_hash`, `is_active`), `identity.roles`,
-  `identity.permissions`, `identity.user_roles`, `identity.role_permissions` (FKs inside the schema only).
-- `audit.audit_events` (actor, action, resource, outcome in success/failure/denied, JSONB detail,
-  indexes on occurred_at, action, actor).
-- Roles and permissions are seeded by the migration (viewer, presenter, admin; 14 permissions).
-  The reference matrix lives in `identity/domain/permissions.py`; a test asserts the DB matches it.
-- Demo users are created by `python -m app.modules.identity.application.seed`
-  (passwords from `DEMO_*_PASSWORD` env vars; existing users are never modified).
+One linear base plus seven independent branches, each with `down_revision = 0001`. The backend starts with
+`alembic upgrade heads` (note the plural).
 
-## Simulation data (migration 0100, branch label `sim`)
-- `resource_management`: `departments` (code, name, capacity = beds allocated, workload_weight), `staff` (ref SIM-DOC-001, role doctor/nurse, status available/busy/off_duty), `beds` (ref SIM-BED-01, status available/occupied), `investigation_facilities` (LAB, XRAY, CT, US; capacity, expected_minutes).
-- `patient_queue`: `patient_visits` (visit_ref SIM-VIS-0001, patient_ref SIM-PAT-001, arrival/registered/treatment_started/discharged timestamps, department_code, simulated triage_category, status waiting/in_treatment/discharged, assigned_staff_ref, bed_ref), `investigation_requests` (FK to visit; status pending/completed; requested_at, expected_minutes), `dataset_clock` (singleton reference time).
-- `simulation`: `scenarios`, `scenario_parameters` (JSONB defaults), `scenario_runs` (history incl. failed attempts; parameters + validation checks as JSONB), `data_state` (singleton: `data_version`, current scenario, applied_at).
-- Cross-schema links are business keys (department_code, bed_ref, staff_ref), never FKs. Waiting durations are measured against `dataset_clock.reference_time` (frozen at apply time) so values do not drift during a demo; "waiting time" = reference time minus arrival for waiting patients.
-- Apply flow (one transaction): resolve/validate params -> generate (seeded) -> resource_management and patient_queue replace their own datasets via their public interfaces -> validate what was persisted (exact counts, mean wait within 10%, mean pending-request age within 15%) -> bump `data_version` -> insert `scenario_runs` -> commit. Any failure rolls back; a failed run is then recorded separately.
-- Apply to a dev database: `alembic upgrade sim@head` (or `heads` for all branches).
+| Revision | Branch label | Content |
+|---|---|---|
+| 0001 | none | `vector` extension and the 11 empty schemas |
+| 0100 | `sim` | resource_management, patient_queue, simulation tables |
+| 0200 | `rag` | knowledge_documents, document_chunks (vector(384), HNSW) |
+| 0300 | `providers` | model_configurations |
+| 0400 | `identity` | identity tables and audit_events, plus seeded roles and permissions |
+| 0500 | `agent` | agent_execution_logs, analysis_runs, chat_sessions, chat_messages |
+| 0600 | `comparison` | ai_comparison_runs, ai_comparison_results |
+| 0700 | `demo` | demo_runs |
 
-## Knowledge base and RAG (migration 0200, branch label `rag`)
-- `knowledge_base.knowledge_documents`: id, name, original_filename, `content_sha256` (UNIQUE, rejects duplicate
-  uploads), size_bytes, page_count, status (`processing` | `indexed` | `failed`, CHECK), chunk_count,
-  error_message, is_sample, created_at/updated_at.
-- `rag.document_chunks`: id, `document_id` (opaque UUID, no cross-schema FK), `document_name` (denormalized
-  for citations), page_number, chunk_index (UNIQUE per document), content, `injection_flagged`,
-  `injection_signals text[]`, `embedding vector(384)`, timestamps.
-- Indexes: `ix_document_chunks_embedding_hnsw` (HNSW, `vector_cosine_ops`), `ix_document_chunks_document_id`.
-- Similarity score returned by search = `1 - cosine_distance` (embeddings are L2-normalized).
-- Embedding model: `sentence-transformers/all-MiniLM-L6-v2` (384 dims), local and independent of the chat LLM.
-  Changing the chat model never requires re-embedding; changing the embedding model requires a migration and re-indexing.
-- Apply just this branch: `alembic upgrade rag@head`.
+Downgrading 0001 removes all module schemas (cascade). Tests apply all heads on an empty database and downgrade to base
+(`backend/tests/test_migrations.py`).
 
-## Agent tools and AI orchestration (migration 0500, branch label `agent`)
-- `agent_tools.agent_execution_logs`: one row per tool interaction (run_id as an opaque UUID, sequence, tool_name,
-  status ok/invalid_arguments/unknown_tool/error/refused, validated arguments, result summary, duration_ms, data_version).
-- `ai_orchestration.analysis_runs`: one row per agent run: question, scenario key/name, **data_version** and
-  `data_version_consistent`, `snapshot_metrics` JSONB, mode and fallback_reason, `tools_executed` and `retrieved_docs` JSONB,
-  `citation_check`, provider, model, temperature, llm_calls, latency_ms, token counts, estimated cost, answer, status
-  (completed/failed), error, created_by. Indexed on created_at, data_version and (run_type, created_at).
-- `ai_orchestration.chat_sessions` and `chat_messages` (FK inside the schema; messages store sources and citation_check).
-- Upgrade just this branch with `alembic upgrade agent@head`; the container startup command (`upgrade heads`) applies it too.
+## Schema ownership
 
-## Demonstration runs (migration 0700, branch label `demo`)
-- `ai_orchestration.demo_runs`: session_id, run_number/run_label ("Run 1"...), scenario key/name, data_version,
-  patient_record_count, metrics_snapshot, verification (before/after evidence), tools_executed, retrieved_policies,
-  question + sha256, final_answer, provider, model, latency, tokens, cost. Unique (session_id, run_number).
-- `analysis_run_id` links to `ai_orchestration.analysis_runs` by value only (no foreign key), so the `demo` and
-  `agent` migration branches stay independent.
-- The "current session" is the session of the newest saved run; reset deletes all demo runs.
+| Schema | Owning module | Tables |
+|---|---|---|
+| identity | identity | users, roles, permissions, user_roles, role_permissions |
+| simulation | simulation | scenarios, scenario_parameters, scenario_runs, data_state |
+| resource_management | resource_management | departments, staff, beds, investigation_facilities |
+| patient_queue | patient_queue | patient_visits, investigation_requests, dataset_clock |
+| analytics | analytics | none (analytics computes read models from other modules' public interfaces) |
+| knowledge_base | knowledge_base | knowledge_documents |
+| rag | rag | document_chunks |
+| model_providers | model_providers | model_configurations |
+| ai_orchestration | ai_orchestration | analysis_runs, chat_sessions, chat_messages, ai_comparison_runs, ai_comparison_results, demo_runs |
+| agent_tools | agent_tools | agent_execution_logs |
+| audit | audit | audit_events |
 
-## Model comparison (migration 0600, branch label `comparison`)
-- `ai_orchestration.ai_comparison_runs`: question, scenario key/name and `data_version` (opaque copies),
-  `data_version_consistent`, `snapshot_metrics`, `shared_tools`, `shared_policies`, `context_sha256`, `selections`,
-  status (`completed`/`partial`/`failed`), created_by; indexes on created_at and data_version.
-- `ai_orchestration.ai_comparison_results`: one row per selected model (FK to the run inside the schema, cascade
-  delete, unique `(comparison_id, position)`): status (`completed`/`failed`/`not_configured`), error, answer, latency,
-  token counts, estimated cost (nullable), tool_calling_supported, data_disclosure, `context_sha256`, `scores`,
-  `citation_check`.
+Note: `audit.audit_events` and the identity tables are created by the same migration (0400).
+
+## resource_management
+
+**departments**: `id`, `code` (unique), `name`, `capacity` int, `workload_weight` float (default 1), timestamps.
+
+**staff**: `id`, `ref` (unique), `role` (`doctor` | `nurse`), `department_id` (FK departments), `status` (`available` | `busy` | `off_duty`), timestamps.
+Index `ix_staff_dept_role_status (department_id, role, status)`.
+
+**beds**: `id`, `ref` (unique), `department_id` (FK departments), `status` (`available` | `occupied`), timestamps.
+Index `ix_beds_dept_status (department_id, status)`.
+
+**investigation_facilities**: `id`, `code` (unique), `name`, `capacity` int, `expected_minutes` int, timestamps.
+
+## patient_queue
+
+**patient_visits**: `id`, `visit_ref` (unique), `patient_ref`, `arrival_at`, `registered_at`, `department_code` (text, matches a department code by value),
+`triage_category` (`critical` | `urgent` | `semi_urgent` | `non_urgent`; simulated, not a clinical priority), `status`
+(`waiting` | `in_treatment` | `discharged`), `treatment_started_at`, `assigned_staff_ref`, `bed_ref` (text refs, no FK), `discharged_at`, timestamps.
+Indexes on `status`, `department_code`, `arrival_at`, `triage_category`.
+
+**investigation_requests**: `id`, `visit_id` (FK patient_visits, on delete cascade), `facility_code` (text), `investigation_type`, `status`
+(`pending` | `completed`), `requested_at`, `completed_at`, `expected_minutes`, timestamps. Indexes on `status`, `visit_id`, `facility_code`.
+
+**dataset_clock**: single-row table (`id = 1`, check constraint) holding `reference_time`. Waiting times are measured against this
+stored reference time (set when a scenario is applied) so numbers do not drift during a session.
+
+## simulation
+
+**scenarios**: `id`, `key` (unique), `name`, `description`, `is_builtin`, timestamps.
+
+**scenario_parameters**: `id`, `scenario_id` (FK scenarios, cascade), `parameters` jsonb, `is_default`, timestamps. Index on `scenario_id`.
+
+**scenario_runs** (history, including failed attempts): `id`, `scenario_id` (FK, set null on delete), `scenario_key`, `scenario_name`, `trigger`,
+`status` (`applied` | `failed`), `data_version`, `parameters` jsonb, `validation` jsonb, `error`, `record_count`, `duration_ms`, timestamps.
+Index on `created_at`.
+
+**data_state**: single-row table (`id = 1`): `data_version` int (starts at 0), `scenario_key`, `scenario_name`, `last_run_id`, `applied_at`, timestamps.
+`data_version` is the identifier that analyses are traced to.
+
+Scenario parameters (`ScenarioParams`, `simulation/domain/params.py`): `seed`, `arrival_rate_per_hour`, `beds_available`, `beds_occupied`,
+`doctors_on_duty`, `nurses_on_duty`, `waiting_patients`, `avg_wait_minutes`, `pending_investigations`, `investigation_delay_minutes`,
+`department_workload` (per department), `window_minutes`.
+
+## knowledge_base and rag
+
+**knowledge_base.knowledge_documents**: `id`, `name`, `original_filename`, `content_sha256` (char 64, unique: duplicate uploads rejected), `size_bytes`,
+`page_count`, `status` (`processing` | `indexed` | `failed`), `chunk_count`, `error_message`, `is_sample`, timestamps. Index on `created_at DESC`.
+
+**rag.document_chunks**: `id`, `document_id` (opaque UUID, no FK), `document_name` (denormalised for citations), `page_number`, `chunk_index`, `content`,
+`injection_flagged` bool, `injection_signals` text[], `embedding vector(384)`, timestamps; unique `(document_id, chunk_index)`.
+Indexes: `document_id`, and **HNSW on `embedding` with `vector_cosine_ops`** (`ix_document_chunks_embedding_hnsw`).
+
+The embedding model is `sentence-transformers/all-MiniLM-L6-v2` (override `RAG_EMBEDDING_MODEL`), dimension fixed to 384 by the column type.
+Changing to a model with another dimension needs a migration and re-embedding. Chunk size and overlap default to 700 / 120
+(`RAG_CHUNK_SIZE`, `RAG_CHUNK_OVERLAP`). The chat model can change without re-embedding.
+
+## model_providers
+
+**model_configurations**: `id`, `provider` (`anthropic` | `openai` | `gemini` | `ollama`), `model_id`, `display_name`, `api_key_env_var`, `api_base_env_var`
+(names of environment variables only; secret values are never stored), `enabled`, timestamps; unique `(provider, model_id)`; index on `provider`.
+
+## identity and audit
+
+**identity.users**: `id`, `username` (unique), `display_name`, `password_hash` (scrypt), `is_active`, timestamps.
+**identity.roles**: `id`, `name` (unique), `description`. **identity.permissions**: `id`, `code` (unique), `description`.
+**identity.user_roles** (`user_id`, `role_id`) and **identity.role_permissions** (`role_id`, `permission_id`): composite primary keys, cascade deletes.
+Migration 0400 seeds the roles `viewer`, `presenter`, `admin` and 14 permissions; demo users are created separately by the seed command.
+
+**audit.audit_events**: `id`, `occurred_at`, `actor`, `action`, `resource`, `outcome` (`success` | `failure` | `denied`), `detail` jsonb, `created_at`.
+Indexes on `occurred_at`, `action`, `actor`. Records are written in their own transaction so they survive a rolled-back request.
+
+## agent_tools and ai_orchestration
+
+**agent_tools.agent_execution_logs**: `id`, `run_id` (opaque), `sequence`, `tool_name`, `status` (`ok` | `invalid_arguments` | `unknown_tool` | `error` | `refused`),
+`arguments` jsonb, `result_summary` jsonb, `error`, `duration_ms`, `data_version`, `created_at`. Indexes `(run_id, sequence)`, `(tool_name, created_at)`.
+
+**ai_orchestration.analysis_runs**: one row per agent or demo run: `run_type` (`agent` | `demo`), `question`, `scenario_key`, `scenario_name`, `data_version`,
+`data_version_consistent`, `snapshot_metrics` jsonb, `mode` (`native` | `fallback`), `fallback_reason`, `tools_executed` jsonb, `retrieved_docs` jsonb,
+`citation_check` jsonb, `provider`, `model`, `temperature`, `llm_calls`, `latency_ms`, `prompt_tokens`, `completion_tokens`, `total_tokens`,
+`estimated_cost_usd`, `data_disclosure`, `answer`, `status` (`completed` | `failed`), `error`, `created_by`, timestamps.
+Indexes on `created_at`, `data_version`, `(run_type, created_at)`.
+
+**chat_sessions**: `id`, `title`, `created_by`, timestamps; index `(created_by, updated_at)`.
+**chat_messages**: `id`, `session_id` (FK chat_sessions, cascade), `role` (`user` | `assistant`), `content`, `sources` jsonb, `citation_check` jsonb, `provider`, `model`,
+`latency_ms`, token counts, `data_disclosure`, `created_at`; index `(session_id, created_at)`.
+
+**ai_comparison_runs**: `id`, `question`, `scenario_key`, `scenario_name`, `data_version`, `data_version_consistent`, `snapshot_metrics`, `shared_tools`,
+`shared_policies` (all jsonb), `context_sha256`, `selections` jsonb, `status` (`completed` | `partial` | `failed`), `created_by`, timestamps.
+**ai_comparison_results**: `id`, `comparison_id` (FK, cascade), `position`, `provider`, `model`, `temperature`, `status` (`completed` | `failed` | `not_configured`),
+`error`, `answer`, `latency_ms`, token counts, `estimated_cost_usd`, `tool_calling_supported`, `data_disclosure`, `context_sha256`, `scores` jsonb,
+`citation_check` jsonb, `created_at`; unique `(comparison_id, position)`.
+
+**demo_runs**: `id`, `session_id`, `run_number`, `run_label` (Run 1/2/3), `analysis_run_id` (opaque link to analysis_runs), `scenario_key`, `scenario_name`,
+`data_version`, `patient_record_count`, `metrics_snapshot` jsonb, `verification` jsonb, `tools_executed`, `retrieved_policies`, `question`, `question_sha256`,
+`final_answer`, `provider`, `model`, `latency_ms`, token counts, `estimated_cost_usd`, `created_by`, timestamps; unique `(session_id, run_number)`.
+
+## Scenario apply is transactional
+
+`simulation/application/service.py` runs, inside one `unit_of_work()` (commit on success, rollback on any exception): replace the
+resource_management dataset, replace the patient_queue dataset (both through those modules' `public.py`), validate what was actually persisted
+against the requested parameters (raises on mismatch, rolling everything back), bump `data_version`, persist the run. A failure afterwards is recorded
+as a `failed` row in `scenario_runs` in a separate transaction.
+
+## Operational notes
+
+- Reset all data: `docker compose down -v` (removes the `pgdata` volume), then start again; migrations re-run on startup.
+- Host access to Postgres: port 5433 (mapped to 5432 in the container).
+- Tests create an isolated database per test process and remove it afterwards; the development database is not used by them.

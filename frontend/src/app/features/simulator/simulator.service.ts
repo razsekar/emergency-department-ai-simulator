@@ -13,6 +13,8 @@ import {
 /** Extracts a human-readable message from the backend's error shapes (app errors and FastAPI 422s). */
 export function apiErrorMessage(err: unknown): string {
   if (err instanceof HttpErrorResponse) {
+    if (err.status === 403) return 'Your role does not permit this action.';
+    if (err.status === 401) return 'Your session has expired or you are not signed in.';
     const body = err.error as
       | { error?: { message?: string }; detail?: string | { msg?: string }[] }
       | null;

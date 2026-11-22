@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 
 from app.modules.identity.public import Permission, require_permission
+from app.platform.ratelimit import rate_limit
 from app.modules.model_providers import public as providers
 from app.modules.model_providers.application.contracts import (
     ChatRequest,
@@ -29,7 +30,8 @@ def models() -> list[ModelInfo]:
     return providers.list_models()
 
 
-@router.post("/chat", response_model=ChatResponse, dependencies=[Depends(require_permission(Permission.AI_CHAT))])
+@router.post("/chat", response_model=ChatResponse,
+             dependencies=[Depends(require_permission(Permission.AI_CHAT)), Depends(rate_limit("chat"))])
 def chat(request: ChatRequest) -> ChatResponse:
     return providers.complete(request)
 
@@ -38,7 +40,8 @@ def _frame(event: StreamEvent) -> str:
     return f"event: {event.type}\ndata: {json.dumps(event.model_dump(mode='json'))}\n\n"
 
 
-@router.post("/chat/stream", dependencies=[Depends(require_permission(Permission.AI_CHAT))])
+@router.post("/chat/stream",
+             dependencies=[Depends(require_permission(Permission.AI_CHAT)), Depends(rate_limit("chat"))])
 def chat_stream(request: ChatRequest) -> StreamingResponse:
     events = providers.stream(request)
     # Pull the first event now: configuration/validation errors then surface as real HTTP errors

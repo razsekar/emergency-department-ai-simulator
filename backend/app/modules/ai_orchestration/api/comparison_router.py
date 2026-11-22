@@ -8,13 +8,15 @@ from app.modules.ai_orchestration.application import comparison_service as servi
 from app.modules.ai_orchestration.application.comparison_service import ComparisonService
 from app.modules.ai_orchestration.application.comparison_wiring import get_comparison_service
 from app.modules.identity.public import CurrentUser, Permission, require_permission
+from app.platform.ratelimit import rate_limit
 
 router = APIRouter(tags=["model-comparison"])
 
 comparison_user = require_permission(Permission.COMPARISON_RUN)
 
 
-@router.post("/api/comparison/run", response_model=cc.ComparisonRunResponse)
+@router.post("/api/comparison/run", response_model=cc.ComparisonRunResponse,
+             dependencies=[Depends(rate_limit("agent"))])
 def run_comparison(body: cc.ComparisonRunRequest, user: CurrentUser = Depends(comparison_user),
                    svc: ComparisonService = Depends(get_comparison_service)) -> cc.ComparisonRunResponse:
     """Demonstration comparison (not a benchmark): every model answers from the same frozen data and context."""

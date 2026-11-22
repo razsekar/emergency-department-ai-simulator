@@ -13,6 +13,7 @@ from app.modules.ai_orchestration.application.chat import ChatService
 from app.modules.ai_orchestration.application.service import AgentService
 from app.modules.ai_orchestration.application.wiring import get_agent_service, get_chat_service
 from app.modules.identity.public import CurrentUser, Permission, require_permission
+from app.platform.ratelimit import rate_limit
 
 router = APIRouter(tags=["ai-orchestration"])
 
@@ -25,7 +26,7 @@ chat_user = require_permission(Permission.AI_CHAT)
 
 
 # ------------------------------------------------------------------ agent
-@router.post("/api/agent/run", response_model=c.AgentRunResponse)
+@router.post("/api/agent/run", response_model=c.AgentRunResponse, dependencies=[Depends(rate_limit("agent"))])
 def run_agent(body: c.AgentRunRequest, user: CurrentUser = Depends(agent_user),
               svc: AgentService = Depends(get_agent_service)) -> c.AgentRunResponse:
     return svc.run(question=body.question, provider=body.provider, model=body.model, temperature=body.temperature,
@@ -37,7 +38,7 @@ def demo_question(_: CurrentUser = Depends(agent_user)) -> dict[str, str]:
     return {"question": service.demo_question()}
 
 
-@router.post("/api/agent/demo-run", response_model=c.AgentRunResponse)
+@router.post("/api/agent/demo-run", response_model=c.AgentRunResponse, dependencies=[Depends(rate_limit("agent"))])
 def demo_run(body: c.DemoRunRequest, user: CurrentUser = Depends(agent_user),
              svc: AgentService = Depends(get_agent_service)) -> c.AgentRunResponse:
     return svc.demo_run(provider=body.provider, model=body.model, temperature=body.temperature, mode=body.mode,
@@ -77,7 +78,8 @@ def get_session(session_id: uuid.UUID, user: CurrentUser = Depends(chat_user),
     return svc.get_session(session_id, user.username)
 
 
-@router.post("/api/chat/sessions/{session_id}/messages", response_model=c.SendMessageResponse)
+@router.post("/api/chat/sessions/{session_id}/messages", response_model=c.SendMessageResponse,
+             dependencies=[Depends(rate_limit("chat"))])
 def send_message(session_id: uuid.UUID, body: c.SendMessageRequest, user: CurrentUser = Depends(chat_user),
                  svc: ChatService = Depends(get_chat_service)) -> c.SendMessageResponse:
     return svc.send_message(session_id, body, user.username)
@@ -87,7 +89,7 @@ def _frame(event: dict[str, Any]) -> str:
     return f"event: {event['type']}\ndata: {json.dumps(event, default=str)}\n\n"
 
 
-@router.post("/api/chat/sessions/{session_id}/messages/stream")
+@router.post("/api/chat/sessions/{session_id}/messages/stream", dependencies=[Depends(rate_limit("chat"))])
 def stream_message(session_id: uuid.UUID, body: c.SendMessageRequest, user: CurrentUser = Depends(chat_user),
                    svc: ChatService = Depends(get_chat_service)) -> StreamingResponse:
     prepared = svc.prepare_stream(session_id, body, user.username)  # failures here are real HTTP errors

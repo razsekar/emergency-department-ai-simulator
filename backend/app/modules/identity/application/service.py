@@ -11,25 +11,37 @@ from app.modules.identity.infrastructure.settings import IdentitySettings
 from app.modules.identity.infrastructure.tokens import decode_token, issue_token
 from app.platform.audit_events import AuditEvent
 from app.platform.events import get_event_bus
+from app.platform.ratelimit import get_login_backoff
 
 
 class AuthService:
     def __init__(self, session: Session) -> None:
         self._repo = IdentityRepository(session)
 
-    def login(self, username: str, password: str) -> LoginResult:
+    def login(self, username: str, password: str, client: str = "unknown") -> LoginResult:
         settings = IdentitySettings()
         settings.require_signing_secret()  # fail closed if auth isn't configured
+        backoff = get_login_backoff()
+        throttle_key = f"{client}|{username.strip().lower()[:64]}"
+        # While locked out, reject before verifying the password (no oracle, no hashing cost, lock not extended).
+        backoff.check(throttle_key)
         user = self._repo.find_user_by_username(username.strip())
         # Always run one password verification so timing doesn't reveal whether a username exists.
         password_ok = verify_password(password, user.password_hash if user else DUMMY_HASH)
         if user is None or not password_ok or not user.is_active:
             reason = "unknown_user" if user is None else "inactive" if not user.is_active else "bad_password"
+            actor = username.strip()[:64] or "anonymous"
             get_event_bus().publish(
-                AuditEvent(actor=username.strip()[:64] or "anonymous", action="auth.login",
-                           outcome="failure", detail={"reason": reason})
+                AuditEvent(actor=actor, action="auth.login", outcome="failure", detail={"reason": reason})
             )
+            lockout = backoff.failed(throttle_key)
+            if lockout:
+                get_event_bus().publish(
+                    AuditEvent(actor=actor, action="auth.lockout", outcome="denied",
+                               detail={"lockout_seconds": int(lockout), "client": client})
+                )
             raise AuthenticationError("Invalid username or password")
+        backoff.succeeded(throttle_key)
         current = self._build_current_user(user.id)
         token, expires_in = issue_token(str(user.id), user.username, settings)
         get_event_bus().publish(AuditEvent(actor=user.username, action="auth.login", outcome="success"))

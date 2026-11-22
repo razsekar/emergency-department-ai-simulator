@@ -1,12 +1,15 @@
 """HTTP endpoints for the operations dashboard. Controllers delegate to application use cases."""
 from typing import Annotated
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
 from app.modules.analytics.application import contracts as c
 from app.modules.analytics.application import service
+from app.modules.identity.public import Permission, require_permission
 
-router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
+router = APIRouter(
+    prefix="/api/dashboard", tags=["dashboard"], dependencies=[Depends(require_permission(Permission.DASHBOARD_READ))]
+)
 
 
 @router.get("/metrics", response_model=c.DashboardMetrics)

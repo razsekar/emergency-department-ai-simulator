@@ -33,6 +33,10 @@ import { AuthService } from './auth.service';
           @if (error()) {
             <p class="error" role="alert">{{ error() }}</p>
           }
+          <p class="hint" data-test="login-hint">
+            Demo accounts: <strong>demo_admin</strong>, <strong>demo_presenter</strong>, <strong>demo_viewer</strong>.
+            Passwords are set by the administrator in the server's <code>.env</code>.
+          </p>
           <button mat-flat-button type="submit" [disabled]="form.invalid || busy()">
             {{ busy() ? 'Signing in…' : 'Sign in' }}
           </button>
@@ -44,6 +48,7 @@ import { AuthService } from './auth.service';
     .login { max-width: 420px; margin: 48px auto; }
     .form { display: flex; flex-direction: column; gap: 4px; padding-top: 16px; }
     .error { color: #b3261e; margin: 0 0 8px; }
+    .hint { font-size: 13px; opacity: 0.8; margin: 0 0 12px; }
   `,
 })
 export class LoginPage {
@@ -65,8 +70,7 @@ export class LoginPage {
     this.auth.login(this.form.getRawValue()).subscribe({
       next: () => {
         const target = this.route.snapshot.queryParamMap.get('returnUrl');
-        // Only allow in-app relative targets (prevents open redirects).
-        void this.router.navigateByUrl(target && target.startsWith('/') && !target.startsWith('//') ? target : '/knowledge-base');
+        void this.router.navigateByUrl(safeReturnUrl(target));
       },
       error: (err: unknown) => {
         this.busy.set(false);
@@ -76,9 +80,20 @@ export class LoginPage {
   }
 }
 
+/**
+ * Where to go after sign-in: the originally requested in-app URL, otherwise the Dashboard.
+ * Only in-app relative targets are accepted (prevents open redirects), and /login itself is never a target.
+ */
+export function safeReturnUrl(target: string | null): string {
+  if (!target || !target.startsWith('/') || target.startsWith('//') || target.startsWith('/\\')) return '/dashboard';
+  if (target === '/login' || target.startsWith('/login?') || target.startsWith('/login/')) return '/dashboard';
+  return target;
+}
+
 export function describeLoginError(err: unknown): string {
   if (err instanceof HttpErrorResponse) {
     if (err.status === 401) return 'Invalid username or password.';
+    if (err.status === 429) return 'Too many failed sign-in attempts. Wait a little and try again.';
     if (err.status === 500 && err.error?.error?.code === 'auth_not_configured') {
       return 'Authentication is not configured on the server (JWT_SECRET missing). Ask the administrator.';
     }

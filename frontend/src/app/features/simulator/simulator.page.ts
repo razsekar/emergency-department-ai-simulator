@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -20,6 +20,8 @@ import {
   ScenarioParams,
   ScenarioRunInfo,
 } from './simulator.models';
+import { AuthService } from '../../core/auth/auth.service';
+import { Permissions } from '../../core/auth/auth.models';
 import { ScenarioService, apiErrorMessage } from './simulator.service';
 
 type BaseKey = Exclude<ScenarioKey, 'custom'>;
@@ -104,22 +106,27 @@ const FIELDS: FieldDef[] = [
       </mat-card-header>
       <mat-card-content>
         <div class="actions">
-          <button mat-flat-button data-test="load-normal" [disabled]="busy()" (click)="load('normal')">
+          <button mat-flat-button data-test="load-normal" [disabled]="busy() || !canApply()" (click)="load('normal')">
             <mat-icon>check_circle</mat-icon> Load Baseline
           </button>
-          <button mat-flat-button class="surge" data-test="load-surge" [disabled]="busy()" (click)="load('surge')">
+          <button mat-flat-button class="surge" data-test="load-surge" [disabled]="busy() || !canApply()" (click)="load('surge')">
             <mat-icon>warning</mat-icon> Load Emergency Surge
           </button>
-          <button mat-flat-button data-test="load-recovery" [disabled]="busy()" (click)="load('recovery')">
+          <button mat-flat-button data-test="load-recovery" [disabled]="busy() || !canApply()" (click)="load('recovery')">
             <mat-icon>healing</mat-icon> Load Recovery
           </button>
-          <button mat-stroked-button data-test="randomize" [disabled]="busy()" (click)="randomize()">
+          <button mat-stroked-button data-test="randomize" [disabled]="busy() || !canApply()" (click)="randomize()">
             <mat-icon>casino</mat-icon> Randomize Scenario
           </button>
-          <button mat-stroked-button data-test="reset" [disabled]="busy()" (click)="reset()">
+          <button mat-stroked-button data-test="reset" [disabled]="busy() || !canReset()" (click)="reset()">
             <mat-icon>restart_alt</mat-icon> Reset Database
           </button>
         </div>
+        @if (!canApply() || !canReset()) {
+          <p class="msg" data-test="permission-note" role="note">
+            Your role cannot {{ !canApply() ? 'apply or randomize scenarios' : 'reset the database' }}. Sign in as a presenter or admin to change the data.
+          </p>
+        }
         @if (message(); as m) {
           <p class="msg" [class.error]="m.kind === 'error'" role="status">{{ m.text }}</p>
         }
@@ -178,7 +185,7 @@ const FIELDS: FieldDef[] = [
           </div>
 
           <div class="actions">
-            <button mat-flat-button type="submit" data-test="apply" [disabled]="busy() || form.invalid">
+            <button mat-flat-button type="submit" data-test="apply" [disabled]="busy() || form.invalid || !canApply()">
               <mat-icon>publish</mat-icon> Apply Scenario
             </button>
             <button mat-button type="button" [disabled]="busy()" (click)="selectBase(base())">Revert edits</button>
@@ -262,8 +269,13 @@ const FIELDS: FieldDef[] = [
 })
 export class SimulatorPage {
   protected readonly scenario = inject(ScenarioService);
+  private readonly auth = inject(AuthService);
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
+
+  /** UX only: the backend enforces these permissions independently. */
+  protected readonly canApply = computed(() => this.auth.hasPermission(Permissions.ScenarioApply));
+  protected readonly canReset = computed(() => this.auth.hasPermission(Permissions.ScenarioReset));
 
   protected readonly fields = FIELDS;
   protected readonly departments = DEPARTMENT_CODES;

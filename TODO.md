@@ -60,7 +60,17 @@ Items are checked only when implemented AND verified (evidence in brackets).
 - [ ] Full demo against the real backend with a real LLM: NOT verified (needs JWT secret/demo passwords in .env and a provider)
 - [ ] Wire RBAC + audit into simulation/analytics/queue/resource endpoints, then add login guards to routes
 - [ ] Rebuilt Docker frontend viewed in a browser by me
-## Phase 9: Testing and documentation (pending)
+## Phase 9: Testing, security, documentation
+- [x] RBAC on all endpoints except /api/health* and login; audit events; rate limits; login back-off; body cap; CORS rule [522 backend tests; live server returns 401 unauthenticated, standard 422 envelope]
+- [x] Frontend login guard on all routes, 403/401 handling, permission-based UX [148 frontend tests; build 501.98 kB]
+- [x] Critical acceptance test over HTTP on the real app (normal->surge->recovery, demo mode, comparison) [scripted fake LLM; stale-cache negative control fails as expected]
+- [x] Section 13 gap tests + coverage matrix (tests/e2e, tests/gaps)
+- [x] README, ARCHITECTURE, DATABASE, API, DEMO_GUIDE, DEPLOYMENT written (K, O) [auth wording being corrected after hardening]
+- [ ] Docs re-checked after hardening (in progress)
+- [ ] Clean-start Docker verification (`down -v` then `up`): NOT done
+- [ ] Real login + seeded demo users: needs JWT_SECRET and DEMO_*_PASSWORD in .env (user)
+- [ ] Real LLM end-to-end demo run: NOT verified (needs a provider key or Ollama model)
+- [ ] Deployment: unverified on Vercel/Railway; see DEPLOYMENT.md for the fixes needed (PORT, DATABASE_URL scheme, dev deps in image, sample_docs, model cache)
 
 ## Notes
 - Host is macOS 13: local Angular builds need `NG_BUILD_SASS_EMBEDDED=false`; Docker builds are unaffected.

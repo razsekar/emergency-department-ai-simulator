@@ -1,6 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { AuthService } from '../../core/auth/auth.service';
 import { applyResponse, NORMAL_PARAMS, SCENARIO_LIST } from '../testing/fixtures';
 import { ScenarioStatusComponent } from './scenario-status.component';
 import { SimulatorPage } from './simulator.page';
@@ -25,17 +26,22 @@ describe('SimulatorPage', () => {
 
   const click = (test: string) => (el.querySelector(`[data-test="${test}"]`) as HTMLButtonElement).click();
 
-  beforeEach(() => {
+  const PRESENTER = ['scenario:apply', 'scenario:reset'];
+
+  const setup = (permissions: string[]) => {
     TestBed.configureTestingModule({
       imports: [SimulatorPage],
       providers: [provideHttpClient(), provideHttpClientTesting()],
     });
+    vi.spyOn(TestBed.inject(AuthService), 'hasPermission').mockImplementation((p) => permissions.includes(p));
     http = TestBed.inject(HttpTestingController);
     fixture = TestBed.createComponent(SimulatorPage);
     el = fixture.nativeElement;
     fixture.detectChanges();
     flushLoad();
-  });
+  };
+
+  beforeEach(() => setup(PRESENTER));
 
   afterEach(() => http.verify());
 
@@ -111,6 +117,14 @@ describe('SimulatorPage', () => {
     expect(el.querySelector('.msg.error')?.textContent).toContain('window_minutes too small');
     expect(el.querySelector('.msg.error')?.textContent).toContain('database unchanged');
   });
+
+  it('turns a 403 from the API into a friendly role message', () => {
+    click('load-surge');
+    http.expectOne('/api/scenarios/apply').flush({ error: { code: 'forbidden', message: 'forbidden' } }, { status: 403, statusText: 'Forbidden' });
+    http.expectOne((r) => r.url === '/api/scenarios/history').flush({ items: [], total: 0, limit: 10, offset: 0 });
+    fixture.detectChanges();
+    expect(el.querySelector('.msg.error')?.textContent).toContain('Your role does not permit this action.');
+  });
 });
 
 describe('ScenarioStatusComponent', () => {
@@ -128,6 +142,29 @@ describe('ScenarioStatusComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Emergency Surge');
     expect(fixture.nativeElement.textContent).toContain('data v4');
     expect(fixture.nativeElement.querySelector('.pill').getAttribute('data-scenario')).toBe('surge');
+    http.verify();
+  });
+});
+
+describe('SimulatorPage for a viewer (no scenario permissions)', () => {
+  it('disables every data-changing control and explains why', () => {
+    TestBed.configureTestingModule({
+      imports: [SimulatorPage],
+      providers: [provideHttpClient(), provideHttpClientTesting()],
+    });
+    vi.spyOn(TestBed.inject(AuthService), 'hasPermission').mockReturnValue(false);
+    const http = TestBed.inject(HttpTestingController);
+    const fixture = TestBed.createComponent(SimulatorPage);
+    fixture.detectChanges();
+    http.expectOne('/api/scenarios/current').flush({ data_version: 1, scenario_key: 'normal', scenario_name: 'Normal Operations', applied_at: null, last_run_id: null });
+    http.expectOne('/api/scenarios').flush(SCENARIO_LIST);
+    http.expectOne((r) => r.url === '/api/scenarios/history').flush({ items: [], total: 0, limit: 10, offset: 0 });
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    for (const t of ['load-normal', 'load-surge', 'load-recovery', 'randomize', 'reset', 'apply']) {
+      expect((el.querySelector(`[data-test="${t}"]`) as HTMLButtonElement).disabled, t).toBe(true);
+    }
+    expect(el.querySelector('[data-test="permission-note"]')?.textContent).toContain('cannot');
     http.verify();
   });
 });

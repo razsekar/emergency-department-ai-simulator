@@ -72,6 +72,10 @@ describe('ScenarioService', () => {
 describe('apiErrorMessage', () => {
   const err = (body: unknown, status = 400) => new HttpErrorResponse({ error: body, status });
 
+  it('maps 403 and 401 to friendly role/session messages regardless of the body', () => {
+    expect(apiErrorMessage(err({ error: { code: 'forbidden', message: 'forbidden' } }, 403))).toBe('Your role does not permit this action.');
+    expect(apiErrorMessage(err({}, 401))).toContain('session has expired');
+  });
   it('reads the app error shape', () => {
     expect(apiErrorMessage(err({ error: { code: 'c', message: 'Scenario invalid' } }))).toBe('Scenario invalid');
   });

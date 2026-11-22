@@ -20,7 +20,10 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
     catchError((err: unknown) => {
       if (err instanceof HttpErrorResponse && err.status === 401 && isApi && !isLogin) {
         auth.logout();
-        void router.navigate(['/login'], { queryParams: { returnUrl: router.url } });
+        // Several in-flight requests can fail together; only the first one needs to navigate.
+        if (!router.url.startsWith('/login')) {
+          void router.navigate(['/login'], { queryParams: { returnUrl: router.url } });
+        }
       }
       return throwError(() => err);
     }),

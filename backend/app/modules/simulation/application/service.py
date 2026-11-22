@@ -23,7 +23,10 @@ from app.modules.simulation.domain.errors import ScenarioNotFoundError, Scenario
 from app.modules.simulation.domain.params import ScenarioParams
 from app.modules.simulation.domain.validation import ObservedState, validate_observed
 from app.modules.simulation.infrastructure import repository as repo
+from app.platform.audit_events import AuditEvent
 from app.platform.db import unit_of_work
+from app.platform.errors import AppError
+from app.platform.events import get_event_bus
 
 log = logging.getLogger("app.simulation")
 MAX_RANDOMIZE_ATTEMPTS = 5
@@ -122,20 +125,35 @@ def _record_failure(key: str, name: str, params: ScenarioParams | dict, trigger:
             repo.insert_run(
                 session, scenario_key=key, scenario_name=name, trigger=trigger, status="failed",
                 parameters=params.model_dump() if isinstance(params, ScenarioParams) else params,
-                error=str(exc)[:500], record_count=0, duration_ms=0,
+                # Only our own domain errors are safe to show in history; anything else (e.g. a database
+                # driver error) may contain SQL or connection details and stays in the server log.
+                error=str(exc)[:500] if isinstance(exc, AppError) else "Unexpected internal error (see server logs)",
+                record_count=0, duration_ms=0,
             )
     except Exception:  # noqa: BLE001 - never mask the original error
         log.exception("could not record failed scenario run")
 
 
+def _audit(actor: str | None, trigger: str, key: str, outcome: str, detail: dict) -> None:
+    """Publish after the transaction has ended. No actor (internal caller such as demo mode) = no event;
+    those callers publish their own audit record."""
+    if actor:
+        get_event_bus().publish(AuditEvent(actor=actor, action=f"scenario.{trigger}", outcome=outcome,
+                                           resource=f"scenario:{key}", detail=detail))
+
+
 def _execute(key: str, name: str, params: ScenarioParams, trigger: str,
-             reference_time: datetime | None = None) -> s.ApplyResponse:
+             reference_time: datetime | None = None, actor: str | None = None) -> s.ApplyResponse:
     try:
         with unit_of_work() as session:
-            return apply_params(session, key, name, params, trigger, reference_time)
+            result = apply_params(session, key, name, params, trigger, reference_time)
     except Exception as exc:
         _record_failure(key, name, params, trigger, exc)
+        _audit(actor, trigger, key, "failure", {"scenario": name, "error_type": type(exc).__name__})
         raise
+    _audit(actor, trigger, key, "success", {"scenario": name, "data_version": result.state.data_version,
+                                            "record_count": result.run.record_count})
+    return result
 
 
 def resolve_params(key: str, overrides: s.ScenarioOverrides | None) -> tuple[str, str, ScenarioParams]:
@@ -156,17 +174,17 @@ def resolve_params(key: str, overrides: s.ScenarioOverrides | None) -> tuple[str
 
 def apply_scenario(
     key: str, overrides: s.ScenarioOverrides | None = None, trigger: str = "apply",
-    reference_time: datetime | None = None,
+    reference_time: datetime | None = None, actor: str | None = None,
 ) -> s.ApplyResponse:
     skey, name, params = resolve_params(key, overrides)
     return _execute(skey, name, params, "manual" if skey == CUSTOM_KEY and trigger == "apply" else trigger,
-                    reference_time)
+                    reference_time, actor)
 
 
-def reset_database(reference_time: datetime | None = None) -> s.ApplyResponse:
+def reset_database(reference_time: datetime | None = None, actor: str | None = None) -> s.ApplyResponse:
     """Reset = replace all synthetic data with the baseline scenario (data_version still increases)."""
     b = BUILTIN["normal"]
-    return _execute(b.key, b.name, b.params, "reset", reference_time)
+    return _execute(b.key, b.name, b.params, "reset", reference_time, actor)
 
 
 def random_params(rng: random.Random) -> ScenarioParams:
@@ -181,12 +199,20 @@ def random_params(rng: random.Random) -> ScenarioParams:
     )
 
 
-def randomize_scenario(seed: int | None = None) -> s.ApplyResponse:
+def randomize_scenario(seed: int | None = None, actor: str | None = None) -> s.ApplyResponse:
     rng = random.Random(seed if seed is not None else secrets.randbits(31))
     last: Exception | None = None
     for _ in range(MAX_RANDOMIZE_ATTEMPTS):
         try:
-            return _execute(CUSTOM_KEY, "Randomized Scenario", random_params(rng), "randomize")
+            result = _execute(CUSTOM_KEY, "Randomized Scenario", random_params(rng), "randomize")
         except ScenarioValidationError as exc:
             last = exc
+            continue
+        # Audit the final outcome once, not once per internal retry.
+        _audit(actor, "randomize", CUSTOM_KEY, "success",
+               {"scenario": "Randomized Scenario", "data_version": result.state.data_version,
+                "record_count": result.run.record_count})
+        return result
+    _audit(actor, "randomize", CUSTOM_KEY, "failure", {"scenario": "Randomized Scenario",
+                                                       "error_type": "ScenarioValidationError"})
     raise ScenarioValidationError(f"Could not generate a valid random scenario: {last}")

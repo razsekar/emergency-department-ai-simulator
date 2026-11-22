@@ -5,6 +5,16 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 
 
+@pytest.fixture(autouse=True)
+def _fresh_rate_limits():
+    """Rate limiter and login back-off are process-wide; isolate every test from the previous one."""
+    from app.platform.ratelimit import reset_rate_limits
+
+    reset_rate_limits()
+    yield
+    reset_rate_limits()
+
+
 @pytest.fixture(scope="session")
 def test_db_url():
     """Create an isolated empty database for migration tests; remove it afterwards."""

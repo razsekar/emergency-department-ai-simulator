@@ -77,12 +77,27 @@ def session(clean_state):
         yield s
 
 
-def module_client():
-    """TestClient over an app containing only the simulation-data module routers (no other modules needed)."""
+def user_for_role(role: str):
+    """A CurrentUser with exactly the permissions the role has in the reference matrix."""
+    from uuid import uuid4
+
+    from app.modules.identity.public import ROLE_PERMISSIONS, CurrentUser
+
+    return CurrentUser(id=uuid4(), username=f"test_{role}", display_name=role, roles=(role,),
+                       permissions=frozenset(str(p) for p in ROLE_PERMISSIONS[role]))
+
+
+def module_client(role: str | None = "admin", raise_server_exceptions: bool = True):
+    """TestClient over an app containing only the simulation-data module routers (no other modules needed).
+
+    `role` injects a signed-in user with that role's permissions (RBAC is still enforced, which is the
+    point); `role=None` sends requests anonymously so the 401 behaviour can be tested.
+    """
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
     from app.modules.analytics.api.router import router as analytics_router
+    from app.modules.identity.public import get_current_user
     from app.modules.patient_queue.api.router import router as queue_router
     from app.modules.resource_management.api.router import router as resources_router
     from app.modules.simulation.api.router import router as simulation_router
@@ -92,4 +107,7 @@ def module_client():
     install_error_handlers(api)
     for r in (simulation_router, queue_router, resources_router, analytics_router):
         api.include_router(r)
-    return TestClient(api)
+    if role is not None:
+        user = user_for_role(role)
+        api.dependency_overrides[get_current_user] = lambda: user
+    return TestClient(api, raise_server_exceptions=raise_server_exceptions)

@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.platform import health
+from app.platform.bodylimit import BodySizeLimitMiddleware
 from app.platform.config import get_settings
 from app.platform.errors import install_error_handlers
 
@@ -19,6 +20,8 @@ def create_app() -> FastAPI:
         docs_url="/api/docs",
         openapi_url="/api/openapi.json",
     )
+    # Added before CORS so CORS stays outermost and a 413 response still carries CORS headers.
+    app.add_middleware(BodySizeLimitMiddleware, max_bytes=settings.max_request_body_mb * 1024 * 1024)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,

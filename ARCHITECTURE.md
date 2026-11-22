@@ -1,43 +1,175 @@
 # Architecture
 
-Educational Emergency Department Patient Flow Simulator. **Synthetic data only.**
+Educational Emergency Department Patient Flow Simulator. **Synthetic data only; not a clinical system.**
 
 ## Style: strict modular monolith
-One FastAPI app, one PostgreSQL (pgvector) database, one Angular SPA. No microservices.
+
+One FastAPI application, one PostgreSQL (pgvector) database, one Angular SPA. No microservices, no message broker.
+Business capabilities are separate modules with explicit public interfaces and one database schema each.
 
 ```
-Angular SPA (:4200, nginx) --/api--> FastAPI (:8000) --> PostgreSQL + pgvector (:5433 on host)
-                                         |--> LLM providers via LiteLLM (Phase 5+)
-                                         '--> Ollama (optional profile)
+ Browser ── Angular SPA (nginx, :4200) ──/api──▶ FastAPI app (:8000) ──▶ PostgreSQL + pgvector (:5433 on host)
+                                                    │  one process, 11 modules
+                                                    ├─▶ LiteLLM ─▶ Anthropic / OpenAI / Gemini   (cloud: prompts leave the machine)
+                                                    └─▶ LiteLLM ─▶ Ollama (local, optional)
+ Embeddings: sentence-transformers all-MiniLM-L6-v2, in-process, independent of the chat model
 ```
 
 ## Backend layout
-`backend/app/main.py` is the composition root. `backend/app/platform/` is a minimal shared kernel
-(config, DB session/unit of work, event bus, errors, health) with **no business logic**.
-`backend/app/modules/<name>/{api,application,domain,infrastructure,public.py}` for each of:
-identity, simulation, patient_queue, resource_management, analytics, knowledge_base, rag,
-ai_orchestration, agent_tools, model_providers, audit.
+
+```
+backend/app/
+  main.py            composition root: middleware, error handlers, auto-registers every module's api/router.py
+  platform/          shared kernel only: config, db session / unit_of_work, event bus, errors, health, audit event type
+  modules/<name>/    api/  application/  domain/  infrastructure/  public.py
+```
+
+Modules: identity, simulation, patient_queue, resource_management, analytics, knowledge_base, rag, ai_orchestration,
+agent_tools, model_providers, audit. Within a module: `api` (thin controllers) calls `application` (use cases), which uses `domain`
+(pure rules) and `infrastructure` (ORM models, repositories, external SDKs).
 
 ## Allowed dependency direction
-- `api -> application -> domain`; `infrastructure` implements ports. API controllers hold no persistence logic.
-- Another module may be imported **only** through `app.modules.<other>.public`.
-- The module graph is acyclic. Planned direction:
-  `ai_orchestration -> agent_tools -> {analytics, rag, simulation, patient_queue, resource_management}`;
-  `rag -> knowledge_base`; `simulation -> {patient_queue, resource_management}`;
-  `analytics -> {patient_queue, resource_management}`; `ai_orchestration -> model_providers`.
-  Reverse notifications use in-process events. `audit` subscribes to events.
-- `platform/` never imports modules.
-- Each module owns one PostgreSQL schema and writes only to its own tables. Cross-module
-  references are opaque UUIDs (no cross-schema foreign keys).
 
-Enforced by `backend/tests/architecture/test_module_boundaries.py` (AST-based). Currently run
-against the empty skeleton; they gain meaning as code lands in each module.
+Rules, enforced by `backend/tests/architecture/test_module_boundaries.py` (AST/regex based):
 
-## Scenario apply (Phase 3): one transaction
-validate -> open unit of work -> each owning module replaces its own dataset via its `public.py`
--> bump `data_version` -> write scenario_runs -> commit. Any exception rolls everything back.
+1. A module may import another module **only** through `app.modules.<other>.public`.
+2. The module graph has no cycles.
+3. API controllers contain no persistence code (no SQLAlchemy, no infrastructure or domain imports, no `.execute/.query/.add/.commit` calls).
+4. A module's code may not reference another module's schema in SQL or table definitions.
+5. `app/platform` never imports a module.
+
+The actual graph, computed from the imports in the code (a module on the right is imported by the module on the left, always via `public`):
+
+```
+identity            -> (nothing)
+patient_queue       -> (nothing)
+resource_management -> (nothing)
+simulation          -> patient_queue, resource_management
+analytics           -> patient_queue, resource_management, simulation
+knowledge_base      -> identity
+rag                 -> identity, knowledge_base
+model_providers     -> identity
+audit               -> identity
+agent_tools         -> analytics, identity, patient_queue, rag, resource_management, simulation
+ai_orchestration    -> agent_tools, analytics, identity, model_providers, rag, simulation
+```
+
+Layers, from foundations upward: `identity`, `patient_queue`, `resource_management` (leaves) → `simulation`, `analytics`,
+`knowledge_base`, `model_providers`, `audit` → `rag` → `agent_tools` → `ai_orchestration`.
+
+Cross-module notifications use the in-process event bus (`platform/events.py`). `knowledge_base` publishes `DocumentUploaded` /
+`DocumentDeleted` and `rag` subscribes, so `knowledge_base` does not depend on `rag`. Audit records are emitted as
+`platform.audit_events.AuditEvent` and persisted by the audit module.
+
+Limits of enforcement: rule 4 is a text search, not database privileges; the database is a single role. The tests have been shown to fail
+on a deliberately planted internal import and a cross-schema SQL string. The controller rule (3) is a regex and has not been demonstrated failing.
+
+## Data ownership
+
+Each module owns one PostgreSQL schema and writes only to its own tables (see DATABASE.md). Cross-schema references are opaque
+values, not foreign keys. `analytics` owns no tables and builds read models from other modules' public interfaces.
+
+## Scenario application (atomic)
+
+`POST /api/scenarios/apply` (and randomize, reset, and the demo step) run `simulation/application/service.py`:
+
+```
+validate parameters
+  └─ unit_of_work (one DB transaction)
+       ├─ resource_management.replace_dataset(session, spec)    via public.py
+       ├─ patient_queue.replace_dataset(session, spec)          via public.py
+       ├─ validate what was actually persisted against the parameters   (mismatch => exception => full rollback)
+       ├─ bump simulation.data_state.data_version, record scenario_runs
+       └─ commit
+failure => rollback, then a separate transaction records a 'failed' row in scenario_runs
+```
+
+Records are generated by a seeded, deterministic generator, so the three built-in scenarios give exact counts (for example Normal: 12 waiting, 5 pending
+investigations; Surge: 38 and 28; Recovery: 9 and 4, per the backend tests). Waiting times are computed from timestamps against a stored reference time.
+
+## Agent loop and grounding
+
+`ai_orchestration` coordinates; `agent_tools` owns the seven approved tools; data comes through other modules' public interfaces. No raw SQL or shell access exists.
+
+Tools: `get_patient_queue`, `get_bed_availability`, `get_staff_availability`, `calculate_waiting_metrics`, `get_pending_investigations`,
+`retrieve_hospital_protocol`, `generate_department_report`. Inputs and outputs are validated with Pydantic models; each call is logged to
+`agent_tools.agent_execution_logs`.
+
+```
+question ─▶ snapshot (data_version, metrics) ─▶ LLM (tools offered) ──▶ tool call ─▶ validate args ─▶ run tool (live data) ─┐
+                 ▲                                      ▲                                                                    │
+                 └──────────── at most 5 tool executions; 6th is refused ◀────────────────────────────────────────────────┘
+        final LLM call ─▶ answer ─▶ citation check (every [Source: doc, p.N] must match a retrieved chunk) ─▶ stored in analysis_runs
+```
+
+- **Native mode:** used when the model is known to support tool calling. **Fallback mode** (labelled in every result): a fixed plan runs the tools, then one LLM call synthesises.
+- **Policy retrieval:** queries are derived from the metrics just observed. Retrieved text is wrapped as untrusted data; chunks flagged by the injection heuristics
+  are withheld from the model. The injection check is a set of regular expressions (`rag/domain/injection.py`), not a guarantee.
+- **No answer caching.** Each run takes a fresh snapshot and records `data_version`.
+- The system prompt forbids diagnosis, treatment advice and clinical prioritisation. This is an instruction to the model, not a technical guarantee.
+
+## Same question, different data (Demo Mode)
+
+```
+POST /api/demo/step {scenario, provider, model}
+  1  record data_version_before
+  2  simulation.apply_scenario(scenario)            (atomic, see above)
+  3  verify data_version increased  (else 409, question NOT asked)
+  4  run the agent with FIXED_DEMO_QUESTION          (live tools, no cache)
+  5  verify: question byte-identical; agent analysed the data_version from step 2
+  6  save as Run N in ai_orchestration.demo_runs with metrics, tools, policies, answer, model, latency, tokens
+GET /api/demo/session  -> Run 1/2/3 plus a metric-by-metric diff computed from stored values
+```
+
+Steps are serialised by an in-process lock, so run one backend process.
+
+## Model comparison
+
+`POST /api/comparison/run` computes one snapshot, one set of tool results and one policy context, then each selected model answers from a byte-identical
+prompt (the hash is stored per model). Scores (accuracy against snapshot metrics, completeness, relevance, citation correctness) are regex heuristics and the
+response is labelled a demonstration comparison, not a benchmark.
+
+## Security model (as implemented)
+
+- **Secrets:** provider keys and `JWT_SECRET` are read from the backend environment only; the API never returns key values.
+- **Authentication:** signed bearer tokens. Every `/api` endpoint except `GET /api/health`, `GET /api/health/db` and `POST /api/auth/login`
+  requires one. There is no refresh token or revocation list; a token is valid until it expires (`JWT_TTL_MINUTES`).
+- **RBAC:** enforced server-side by `identity.public.require_permission` on all other endpoints, with the roles viewer, presenter and admin (matrix in API.md).
+  Roles and permissions are re-read from the database on every request. The frontend login guard is a convenience, not the security boundary: an anonymous
+  request to any protected endpoint is answered 401 by the backend (checked live on 2026-11-22, and by `tests/security/test_rbac_matrix.py`).
+- **Audit:** security and operational events are recorded in `audit.audit_events` (login success/failure, `authz.denied`, `auth.lockout`, `ratelimit.exceeded`,
+  scenario apply/randomize/reset, document upload/delete, agent, comparison and demo runs). Records are written in their own transaction. Admin-only read via `GET /api/audit/events`.
+- **Rate limits:** an in-process sliding window (60 s) per client for three buckets: agent (30/min: agent run, demo run, demo step, comparison), chat (60/min) and
+  upload (20/min). A rejected call returns 429 `rate_limited` with `Retry-After`. Settings: `RATE_LIMIT_ENABLED`, `RATE_LIMIT_AGENT_PER_MINUTE`,
+  `RATE_LIMIT_CHAT_PER_MINUTE`, `RATE_LIMIT_UPLOAD_PER_MINUTE` (0 disables a bucket).
+- **Login back-off:** after 5 consecutive failures within 300 s for one (client address, username) pair, that pair is locked for 15 s, doubling per further failure up to 300 s.
+  While locked, even the correct password gets 429 and the lock is not extended; a success clears the counter. Unknown usernames are throttled the same way.
+- **Request size:** requests whose `Content-Length` exceeds 12 MB (`MAX_REQUEST_BODY_MB`) get 413 before the body is parsed. Uploads are PDF only and limited to
+  `KB_MAX_UPLOAD_MB` (default 10), with content and page-count checks.
+- **CORS:** only the origins in `CORS_ORIGINS` (default `http://localhost:4200`), methods GET/POST/PUT/PATCH/DELETE, headers Authorization and Content-Type, no credentials;
+  a `*` origin is refused at startup.
+- **Errors:** every error uses the `{"error": {"code", "message"}}` envelope; 422 never echoes submitted values; 500 is always the generic message.
+- **Cloud disclosure:** cloud providers receive prompts, live metrics and retrieved policy text; model listings and responses carry a `data_disclosure` text.
+
+Limits of these controls (read before exposing the app beyond one trusted room):
+
+- Rate-limit and login back-off state is **in process memory**: it resets on restart and is not shared between processes or replicas. Run one backend process (the demo-step lock has the same limit).
+- The limiter key is the peer address plus a hash of the `Authorization` header. `X-Forwarded-For` is deliberately **not** trusted because clients can forge it. Consequently the login back-off,
+  which has no token yet, is keyed on the peer address and username; when requests arrive through the frontend's nginx proxy the peer address is the proxy's (inferred from the code; not tested), so all browsers share one lock per username.
+- **The lockout can be abused:** anyone who knows a username can lock that user out for up to five minutes with wrong guesses. The lock expires on its own.
+- The `Content-Length` check does not cover chunked requests without that header (the upload handler still reads at most the upload limit plus one byte).
+- Prompt-injection and clinical-advice protections are regular-expression heuristics and system-prompt instructions, not guarantees.
+- No token revocation, no multi-factor sign-in, and TLS is not terminated by this stack (put it behind HTTPS if it leaves localhost).
+- Database privileges are not split per module; the one-schema-per-module rule is enforced by tests, not by roles.
+
+## Frontend
+
+Angular standalone components, strict TypeScript, Signals, Angular Material. Routes (lazy-loaded): Demo Mode, Dashboard, Patient Queue, Resource Management, Scenario Simulator,
+Knowledge Base, AI Assistant, Agent Execution, Model Playground, Response Comparison, Settings, and a login page. Business logic stays in the backend; the frontend only
+calls `/api/...` with relative paths (nginx or the dev proxy forwards them). A persistent SIMULATION MODE banner is always visible.
 
 ## Runtime notes
-- Backend runs on Python 3.12 in Docker (host Python 3.14 lacks ML wheels).
-- Container runtime on this machine is Colima (`colima start`).
-- Provider API keys live only in backend env (`.env`), never in the frontend.
+
+- Backend runs on Python 3.12 in Docker (the host's Python 3.14 lacks wheels for the ML stack).
+- Container runtime on the development machine is Colima (`colima start`).
+- Compose services: `db`, `backend`, `frontend`, optional `ollama` profile. Named volumes: `pgdata`, `ollama`, `hf_models` (embedding model cache).

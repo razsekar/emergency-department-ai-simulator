@@ -1,12 +1,16 @@
 """HTTP endpoints for resource management. Controllers delegate to application use cases."""
 from typing import Annotated
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
 from app.modules.resource_management.application import contracts as c
 from app.modules.resource_management.application import service
+from app.modules.identity.public import Permission, require_permission
 
-router = APIRouter(prefix="/api/resources", tags=["resources"])
+router = APIRouter(
+    prefix="/api/resources", tags=["resources"],
+    dependencies=[Depends(require_permission(Permission.RESOURCES_READ))],
+)
 
 Department = Annotated[str | None, Query(description="Department code, e.g. ACUTE")]
 

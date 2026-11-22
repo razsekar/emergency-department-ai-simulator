@@ -1,5 +1,5 @@
 """Thin HTTP layer: validates input, delegates to application services."""
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from app.modules.identity.api.schemas import LoginRequest, TokenResponse, UserResponse
 from app.modules.identity.application.contracts import CurrentUser
@@ -17,8 +17,11 @@ def _user_response(user: CurrentUser) -> UserResponse:
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(body: LoginRequest, service: AuthService = Depends(get_auth_service)) -> TokenResponse:
-    result = service.login(body.username, body.password)
+def login(
+    body: LoginRequest, request: Request, service: AuthService = Depends(get_auth_service)
+) -> TokenResponse:
+    # The service applies back-off per (client address, username) after repeated failures.
+    result = service.login(body.username, body.password, client=request.client.host if request.client else "unknown")
     return TokenResponse(
         access_token=result.access_token, token_type=result.token_type,
         expires_in=result.expires_in, user=_user_response(result.user),

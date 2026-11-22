@@ -1,12 +1,16 @@
 """HTTP endpoints for the patient queue. Controllers delegate to application use cases."""
 from typing import Annotated
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
 from app.modules.patient_queue.application import contracts as c
 from app.modules.patient_queue.application import service
+from app.modules.identity.public import Permission, require_permission
 
-router = APIRouter(prefix="/api/patient-queue", tags=["patient-queue"])
+router = APIRouter(
+    prefix="/api/patient-queue", tags=["patient-queue"],
+    dependencies=[Depends(require_permission(Permission.QUEUE_READ))],
+)
 
 Department = Annotated[str | None, Query(description="Department code, e.g. ACUTE")]
 

@@ -21,6 +21,9 @@ export interface LoginRequest {
 
 /** Permission names enforced by the backend. The frontend uses them for UX only (hide/disable). */
 export const Permissions = {
+  ScenarioApply: 'scenario:apply',
+  ScenarioReset: 'scenario:reset',
+  ComparisonRun: 'comparison:run',
   KnowledgeRead: 'knowledge:read',
   KnowledgeUpload: 'knowledge:upload',
   AiChat: 'ai:chat',

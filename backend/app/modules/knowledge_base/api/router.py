@@ -5,6 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 
 from app.modules.identity.public import CurrentUser, Permission, require_permission
+from app.platform.ratelimit import rate_limit
 from app.modules.knowledge_base import public as kb
 from app.modules.knowledge_base.api.schemas import DocumentOut, DocumentPage, SampleLoadResult
 
@@ -13,7 +14,7 @@ router = APIRouter(prefix="/api/knowledge/documents", tags=["knowledge-base"])
 _READ_CHUNK = 1024 * 1024
 
 
-@router.post("", response_model=DocumentOut, status_code=201)
+@router.post("", response_model=DocumentOut, status_code=201, dependencies=[Depends(rate_limit("upload"))])
 async def upload(
     file: UploadFile = File(...),
     name: str | None = Form(default=None),
@@ -27,7 +28,7 @@ async def upload(
     return DocumentOut(**asdict(kb.upload_document(file.filename, data, display_name=name, actor=user.username)))
 
 
-@router.post("/load-samples", response_model=SampleLoadResult)
+@router.post("/load-samples", response_model=SampleLoadResult, dependencies=[Depends(rate_limit("upload"))])
 def load_samples(user: CurrentUser = Depends(require_permission(Permission.KNOWLEDGE_UPLOAD))) -> SampleLoadResult:
     return SampleLoadResult(**kb.load_sample_documents(actor=user.username))
 

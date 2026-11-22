@@ -6,6 +6,7 @@ from app.modules.ai_orchestration.application import service
 from app.modules.ai_orchestration.application.demo_service import DemoService
 from app.modules.ai_orchestration.application.demo_wiring import get_demo_service
 from app.modules.identity.public import CurrentUser, Permission, require_permission
+from app.platform.ratelimit import rate_limit
 
 demo_router = APIRouter(prefix="/api/demo", tags=["demo"])
 
@@ -19,7 +20,8 @@ def question(_: CurrentUser = Depends(agent_user)) -> dict[str, str]:
     return {"question": service.demo_question()}
 
 
-@demo_router.post("/step", response_model=d.DemoStepResponse, dependencies=[Depends(apply_user)])
+@demo_router.post("/step", response_model=d.DemoStepResponse,
+                  dependencies=[Depends(apply_user), Depends(rate_limit("agent"))])
 def step(body: d.DemoStepRequest, user: CurrentUser = Depends(agent_user),
          svc: DemoService = Depends(get_demo_service)) -> d.DemoStepResponse:
     return svc.step(body, actor=user.username)
