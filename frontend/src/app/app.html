@@ -1,0 +1,58 @@
+<div class="sim-banner" role="status">
+  <mat-icon aria-hidden="true">science</mat-icon>
+  <strong>SIMULATION MODE</strong>
+  <span>Synthetic data only — educational simulation, not real hospital data</span>
+</div>
+
+<mat-sidenav-container class="shell">
+  <mat-sidenav
+    #nav
+    [mode]="isMobile() ? 'over' : 'side'"
+    [opened]="!isMobile()"
+    class="sidenav"
+    aria-label="Main navigation"
+  >
+    <mat-nav-list>
+      @for (item of navItems; track item.path) {
+        <a
+          mat-list-item
+          [routerLink]="item.path"
+          routerLinkActive="active"
+          #rla="routerLinkActive"
+          [activated]="rla.isActive"
+          (click)="isMobile() && nav.close()"
+        >
+          <mat-icon matListItemIcon>{{ item.icon }}</mat-icon>
+          <span matListItemTitle>{{ item.label }}</span>
+        </a>
+      }
+    </mat-nav-list>
+  </mat-sidenav>
+
+  <mat-sidenav-content>
+    <mat-toolbar class="toolbar">
+      @if (isMobile()) {
+        <button mat-icon-button (click)="nav.toggle()" aria-label="Toggle navigation">
+          <mat-icon>menu</mat-icon>
+        </button>
+      }
+      <mat-icon aria-hidden="true" class="brand-icon">emergency</mat-icon>
+      <span class="brand">ED Patient Flow Simulator</span>
+      <span class="spacer"></span>
+      <div class="status" aria-label="System status">
+        <span class="chip" [attr.data-state]="status().backend" title="FastAPI backend">
+          Backend: {{ label(status().backend) }}
+        </span>
+        <span class="chip" [attr.data-state]="status().database" title="PostgreSQL">
+          Database: {{ label(status().database) }}
+        </span>
+        <span class="chip" [attr.data-state]="status().pgvector" title="pgvector extension">
+          pgvector: {{ label(status().pgvector) }}
+        </span>
+      </div>
+    </mat-toolbar>
+    <main class="content">
+      <router-outlet />
+    </main>
+  </mat-sidenav-content>
+</mat-sidenav-container>

@@ -1,0 +1,19 @@
+"""Alembic environment: one coordinated migration history for all module schemas."""
+import os
+
+from alembic import context
+from sqlalchemy import create_engine
+
+url = os.environ.get("ALEMBIC_DATABASE_URL") or os.environ["DATABASE_URL"]
+
+
+def run_migrations_online() -> None:
+    engine = create_engine(url)
+    with engine.connect() as connection:
+        context.configure(connection=connection, target_metadata=None)
+        with context.begin_transaction():
+            context.run_migrations()
+        connection.commit()
+
+
+run_migrations_online()
