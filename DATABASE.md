@@ -57,3 +57,13 @@ Migration commands (in the backend container): `alembic upgrade head`, `alembic 
 - Embedding model: `sentence-transformers/all-MiniLM-L6-v2` (384 dims), local and independent of the chat LLM.
   Changing the chat model never requires re-embedding; changing the embedding model requires a migration and re-indexing.
 - Apply just this branch: `alembic upgrade rag@head`.
+
+## Agent tools and AI orchestration (migration 0500, branch label `agent`)
+- `agent_tools.agent_execution_logs`: one row per tool interaction (run_id as an opaque UUID, sequence, tool_name,
+  status ok/invalid_arguments/unknown_tool/error/refused, validated arguments, result summary, duration_ms, data_version).
+- `ai_orchestration.analysis_runs`: one row per agent run: question, scenario key/name, **data_version** and
+  `data_version_consistent`, `snapshot_metrics` JSONB, mode and fallback_reason, `tools_executed` and `retrieved_docs` JSONB,
+  `citation_check`, provider, model, temperature, llm_calls, latency_ms, token counts, estimated cost, answer, status
+  (completed/failed), error, created_by. Indexed on created_at, data_version and (run_type, created_at).
+- `ai_orchestration.chat_sessions` and `chat_messages` (FK inside the schema; messages store sources and citation_check).
+- Upgrade just this branch with `alembic upgrade agent@head`; the container startup command (`upgrade heads`) applies it too.

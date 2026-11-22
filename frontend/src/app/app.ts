@@ -9,8 +9,10 @@ import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatButtonModule } from '@angular/material/button';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { map, switchMap, timer } from 'rxjs';
+import { UserMenu } from './core/auth/user-menu.component';
 import { HealthService, ServiceState, UNKNOWN_HEALTH } from './core/health.service';
 import { NAV_ITEMS } from './core/nav-items';
+import { ScenarioStatusComponent } from './features/simulator/scenario-status.component';
 
 @Component({
   selector: 'app-root',
@@ -24,6 +26,8 @@ import { NAV_ITEMS } from './core/nav-items';
     MatIconModule,
     MatChipsModule,
     MatButtonModule,
+    UserMenu,
+    ScenarioStatusComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './app.html',

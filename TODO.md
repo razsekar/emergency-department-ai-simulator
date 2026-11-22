@@ -38,8 +38,17 @@ Items are checked only when implemented AND verified (evidence in brackets).
 - [ ] Set JWT_SECRET and DEMO_*_PASSWORD in .env, run seed (user action)
 - [ ] Login rate limiting
 
-## Phase 6: Agentic AI (pending)
-- Tools must call module public interfaces; send targeted RAG queries per finding (the broad fixed question retrieves poorly).
+## Phase 6: Agentic AI
+- [x] 7 tools, bounded 5-call loop, fallback mode, citation check, run history, demo-run endpoint, chat [302 backend tests pass; scripted fake LLM only]
+- [x] /api/agent/* served by the real app after rebuild [401 without token via nginx proxy]
+- [ ] Real LLM run (needs your API key or local Ollama model): NOT verified
+- [ ] Agent Execution screen (frontend)
+
+## Frontend screens (done, verified by agents + 69 unit tests)
+- [x] Dashboard, Queue, Resources, Simulator [F1 drove Surge/Baseline in a browser; dashboard matched DB]
+- [x] Auth, Knowledge Base, Playground, Assistant, Settings [F2: mocked API in browser; real login untested]
+- [ ] Rebuilt Docker frontend viewed by me in a browser; toolbar wraps; bundle 649 kB over 500 kB budget
+- [ ] Put routes behind login guard once RBAC wired on backend
 ## Phase 7: Model comparison (pending)
 ## Phase 8: Demonstration mode, fixed question, side-by-side (pending)
 ## Phase 9: Testing and documentation (pending)

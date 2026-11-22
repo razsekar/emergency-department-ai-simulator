@@ -75,3 +75,33 @@ All routes need a bearer token. LiteLLM 1.110.x is the only SDK used, and only i
 Errors: 409 `provider_not_configured` (message names the env var to set), 422 `invalid_model`, 502 `provider_error` (generic; provider text is not echoed). Temperature is dropped, with `temperature_applied=false`, only when LiteLLM positively reports it unsupported for the model.
 Env: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `OLLAMA_BASE_URL`, `*_MODELS`. Ollama is "configured" by default; use `?probe=true` to check it is reachable. Models are never pulled automatically.
 Other modules use `app.modules.model_providers.public` (`complete`, `stream`, `list_models`, `provider_status`).
+
+## Agent and chat (agent_tools, ai_orchestration)
+All require a bearer token. `agent:run` (presenter, admin) for `/api/agent/*`; `ai:chat` for `/api/chat/*`.
+
+| Method | Path | Description |
+|---|---|---|
+| GET | /api/agent/tools | The 7 approved tools with simplified JSON schemas |
+| GET | /api/agent/demo-question | The fixed demonstration question |
+| POST | /api/agent/run | `{question, provider, model, temperature?, mode?}` runs the bounded agent loop |
+| POST | /api/agent/demo-run | `{provider, model, temperature?, mode?}`; the question is fixed server-side and cannot be overridden |
+| GET | /api/agent/runs | History, newest first. Filters: `run_type` (agent/demo), `scenario_key`, `data_version`; `limit` 1-100, `offset` |
+| GET | /api/agent/runs/{id} | Full run, including every tool's arguments and output |
+| POST/GET | /api/chat/sessions | Create / list the caller's conversations |
+| GET | /api/chat/sessions/{id} | Conversation with messages (owner only; others get 404) |
+| POST | /api/chat/sessions/{id}/messages | `{content, provider, model, temperature?, use_rag?, include_live_data?}` |
+| POST | /api/chat/sessions/{id}/messages/stream | Same, as Server-Sent Events: `sources`, `delta`*, `done` (or `error`) |
+
+**Run response** carries: `answer`, `status`, `mode` (`native` | `fallback`) and `fallback_reason`, `scenario_key/name`,
+`data_version`, `data_version_consistent` (false if the data changed during the run), `snapshot_metrics` (the numbers to check
+an answer against), `tools_executed[]` (status, arguments, validated output, duration), `retrieved_policies[]`
+(document, page, score, excerpt, flagged), `citation_check` (every `[Source: doc, p.N]` in the answer verified against what
+was actually retrieved), `provider`, `model`, `llm_calls`, `latency_ms`, `usage`, `estimated_cost_usd`, `data_disclosure`.
+
+**Agent behaviour.** Native tool calling when the model is known to support it (`mode=auto`); otherwise a labelled deterministic
+plan (waiting metrics, beds, staff, pending investigations, then policy retrieval with topics derived from the observed
+metrics) followed by one LLM call. At most **5 tool executions** per request; further calls are refused and recorded as
+`refused`. Tool failures and invalid arguments are returned to the model as structured errors, never raised. Nothing is cached:
+each run takes a fresh snapshot and every tool reads live data. Policy text is wrapped as untrusted data; chunks flagged by the
+injection heuristics are withheld from the model. Errors: 409 `provider_not_configured`, 502 `provider_error`,
+502 `agent_run_failed` (failed runs are still stored), 404 unknown run/conversation, 422 invalid input.

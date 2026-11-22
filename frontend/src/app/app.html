@@ -39,6 +39,7 @@
       <mat-icon aria-hidden="true" class="brand-icon">emergency</mat-icon>
       <span class="brand">ED Patient Flow Simulator</span>
       <span class="spacer"></span>
+      <app-scenario-status />
       <div class="status" aria-label="System status">
         <span class="chip" [attr.data-state]="status().backend" title="FastAPI backend">
           Backend: {{ label(status().backend) }}
@@ -50,6 +51,7 @@
           pgvector: {{ label(status().pgvector) }}
         </span>
       </div>
+      <app-user-menu />
     </mat-toolbar>
     <main class="content">
       <router-outlet />
