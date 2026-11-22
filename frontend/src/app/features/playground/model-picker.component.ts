@@ -44,7 +44,9 @@ import { ModelInfo, ProviderName, ProviderStatus } from './providers.service';
           <input matSliderThumb [ngModel]="temperature()" (ngModelChange)="temperature.set($event)" />
         </mat-slider>
       </label>
-      <mat-slide-toggle [ngModel]="streaming()" (ngModelChange)="streaming.set($event)">Stream response</mat-slide-toggle>
+      @if (showStreaming()) {
+        <mat-slide-toggle [ngModel]="streaming()" (ngModelChange)="streaming.set($event)">Stream response</mat-slide-toggle>
+      }
     </div>
   `,
   styles: `
@@ -56,6 +58,8 @@ import { ModelInfo, ProviderName, ProviderStatus } from './providers.service';
 export class ModelPicker {
   readonly statuses = input.required<ProviderStatus[]>();
   readonly models = input.required<ModelInfo[]>();
+  /** Hide the streaming toggle where streaming does not apply (e.g. the agent run endpoint). */
+  readonly showStreaming = input(true);
 
   readonly provider = model<ProviderName | null>(null);
   readonly modelId = model<string | null>(null);

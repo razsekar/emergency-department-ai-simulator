@@ -8,6 +8,7 @@ export interface NavItem {
 }
 
 export const NAV_ITEMS: readonly NavItem[] = [
+  { path: 'demo', label: 'Demo Mode', icon: 'play_circle', phase: 8, summary: 'Same question, three scenarios, side-by-side answers.' },
   { path: 'dashboard', label: 'Dashboard', icon: 'monitoring', phase: 3, summary: 'Operational metrics calculated from database records.' },
   { path: 'patient-queue', label: 'Patient Queue', icon: 'groups', phase: 3, summary: 'Synthetic patient visits with filters.' },
   { path: 'resources', label: 'Resource Management', icon: 'bed', phase: 3, summary: 'Staff, beds, departments and investigation facilities.' },
@@ -16,6 +17,6 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { path: 'assistant', label: 'AI Assistant', icon: 'chat', phase: 5, summary: 'Chat with citations from retrieved policies.' },
   { path: 'agent', label: 'Agent Execution', icon: 'smart_toy', phase: 6, summary: 'Tool-calling agent runs and execution traces.' },
   { path: 'playground', label: 'Model Playground', icon: 'science', phase: 5, summary: 'Choose provider, model and parameters.' },
-  { path: 'comparison', label: 'Response Comparison', icon: 'compare', phase: 8, summary: 'Same question, different data, side by side.' },
+  { path: 'comparison', label: 'Response Comparison', icon: 'compare', phase: 8, summary: 'Compare models on one frozen data snapshot (demonstration, not a benchmark).' },
   { path: 'settings', label: 'Settings', icon: 'settings', phase: 5, summary: 'Provider configuration status (no secrets shown).' },
 ];

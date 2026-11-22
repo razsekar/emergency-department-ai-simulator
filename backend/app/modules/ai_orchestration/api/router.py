@@ -16,6 +16,10 @@ from app.modules.identity.public import CurrentUser, Permission, require_permiss
 
 router = APIRouter(tags=["ai-orchestration"])
 
+from app.modules.ai_orchestration.api.demo_router import demo_router  # noqa: E402  (worker H: demonstration mode)
+
+router.include_router(demo_router)
+
 agent_user = require_permission(Permission.AGENT_RUN)
 chat_user = require_permission(Permission.AI_CHAT)
 
@@ -94,3 +98,9 @@ def stream_message(session_id: uuid.UUID, body: c.SendMessageRequest, user: Curr
             yield _frame(event)
 
     return StreamingResponse(frames(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
+
+
+# ---- model comparison (Phase 7) ----
+from app.modules.ai_orchestration.api import comparison_router  # noqa: E402
+
+router.include_router(comparison_router.router)

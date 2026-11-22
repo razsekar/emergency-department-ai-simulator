@@ -29,8 +29,41 @@
   width: 260px;
 }
 
+.navlist {
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+}
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 24px;
+  color: var(--mat-sys-on-surface);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+
+  &:hover {
+    background: var(--mat-sys-surface-container-high);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--mat-sys-primary);
+    outline-offset: -2px;
+  }
+  &.active {
+    background: var(--mat-sys-secondary-container);
+    color: var(--mat-sys-on-secondary-container);
+  }
+}
+
+// The toolbar never wraps: lower-priority text collapses at narrower widths instead.
 .toolbar {
   gap: 8px;
+  flex-wrap: nowrap;
+  overflow: hidden;
   background: var(--mat-sys-surface-container);
   position: sticky;
   top: 0;
@@ -39,19 +72,43 @@
 
 .brand {
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .spacer {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .status {
   display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 6px;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+}
+
+.dot {
+  display: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+// Visually hidden but still read by screen readers.
+@mixin sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
   padding: 2px 10px;
   border-radius: 12px;
@@ -73,10 +130,31 @@
   padding: 24px;
 }
 
-@media (max-width: 900px) {
+// Progressive collapse so the toolbar stays on one row. Widths are viewport widths; the 260px sidenav
+// takes part of that. First the ": OK" text and brand name go, then the service names (dot only,
+// still exposed through the title and screen-reader text).
+@media (max-width: 1500px) {
+  .chip-state {
+    @include sr-only;
+  }
   .brand {
     display: none;
   }
+}
+
+@media (max-width: 1300px) {
+  .dot {
+    display: inline-block;
+  }
+  .chip {
+    padding: 4px 8px;
+  }
+  .chip-name {
+    @include sr-only;
+  }
+}
+
+@media (max-width: 900px) {
   .content {
     padding: 16px;
   }

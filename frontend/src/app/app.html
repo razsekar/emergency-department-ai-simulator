@@ -12,21 +12,22 @@
     class="sidenav"
     aria-label="Main navigation"
   >
-    <mat-nav-list>
+    <!-- Plain links instead of mat-nav-list: the Material list module pulls form-field and
+         @angular/forms code (~160 kB) into the initial bundle. -->
+    <nav class="navlist">
       @for (item of navItems; track item.path) {
         <a
-          mat-list-item
+          class="nav-link"
           [routerLink]="item.path"
           routerLinkActive="active"
-          #rla="routerLinkActive"
-          [activated]="rla.isActive"
+          ariaCurrentWhenActive="page"
           (click)="isMobile() && nav.close()"
         >
-          <mat-icon matListItemIcon>{{ item.icon }}</mat-icon>
-          <span matListItemTitle>{{ item.label }}</span>
+          <mat-icon aria-hidden="true">{{ item.icon }}</mat-icon>
+          <span>{{ item.label }}</span>
         </a>
       }
-    </mat-nav-list>
+    </nav>
   </mat-sidenav>
 
   <mat-sidenav-content>
@@ -40,15 +41,15 @@
       <span class="brand">ED Patient Flow Simulator</span>
       <span class="spacer"></span>
       <app-scenario-status />
-      <div class="status" aria-label="System status">
-        <span class="chip" [attr.data-state]="status().backend" title="FastAPI backend">
-          Backend: {{ label(status().backend) }}
+      <div class="status" role="group" aria-label="System status">
+        <span class="chip" [attr.data-state]="status().backend" [title]="'FastAPI backend: ' + label(status().backend)">
+          <span class="dot" aria-hidden="true"></span><span class="chip-label"><span class="chip-name">Backend</span><span class="chip-state">: {{ label(status().backend) }}</span></span>
         </span>
-        <span class="chip" [attr.data-state]="status().database" title="PostgreSQL">
-          Database: {{ label(status().database) }}
+        <span class="chip" [attr.data-state]="status().database" [title]="'PostgreSQL: ' + label(status().database)">
+          <span class="dot" aria-hidden="true"></span><span class="chip-label"><span class="chip-name">Database</span><span class="chip-state">: {{ label(status().database) }}</span></span>
         </span>
-        <span class="chip" [attr.data-state]="status().pgvector" title="pgvector extension">
-          pgvector: {{ label(status().pgvector) }}
+        <span class="chip" [attr.data-state]="status().pgvector" [title]="'pgvector extension: ' + label(status().pgvector)">
+          <span class="dot" aria-hidden="true"></span><span class="chip-label"><span class="chip-name">pgvector</span><span class="chip-state">: {{ label(status().pgvector) }}</span></span>
         </span>
       </div>
       <app-user-menu />

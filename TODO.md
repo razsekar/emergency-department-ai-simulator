@@ -49,8 +49,17 @@ Items are checked only when implemented AND verified (evidence in brackets).
 - [x] Auth, Knowledge Base, Playground, Assistant, Settings [F2: mocked API in browser; real login untested]
 - [ ] Rebuilt Docker frontend viewed by me in a browser; toolbar wraps; bundle 649 kB over 500 kB budget
 - [ ] Put routes behind login guard once RBAC wired on backend
-## Phase 7: Model comparison (pending)
-## Phase 8: Demonstration mode, fixed question, side-by-side (pending)
+## Phase 7: Model comparison
+- [x] Backend: shared snapshot/context, per-model answers, scoring heuristics, migration 0600 [370 backend tests pass; scripted fake LLM only]
+- [x] Response Comparison screen [mocked API in browser; 128 frontend tests pass]
+- [ ] Real multi-model run: NOT verified
+
+## Phase 8: Demonstration mode
+- [x] Backend: demo step/session/reset with version + question verification, migration 0700 [tests, incl. mutation check]
+- [x] Demo Mode screen, side-by-side Run 1/2/3 [mocked API in browser]
+- [ ] Full demo against the real backend with a real LLM: NOT verified (needs JWT secret/demo passwords in .env and a provider)
+- [ ] Wire RBAC + audit into simulation/analytics/queue/resource endpoints, then add login guards to routes
+- [ ] Rebuilt Docker frontend viewed in a browser by me
 ## Phase 9: Testing and documentation (pending)
 
 ## Notes

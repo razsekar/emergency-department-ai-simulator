@@ -105,3 +105,46 @@ metrics) followed by one LLM call. At most **5 tool executions** per request; fu
 each run takes a fresh snapshot and every tool reads live data. Policy text is wrapped as untrusted data; chunks flagged by the
 injection heuristics are withheld from the model. Errors: 409 `provider_not_configured`, 502 `provider_error`,
 502 `agent_run_failed` (failed runs are still stored), 404 unknown run/conversation, 422 invalid input.
+
+## Demonstration mode (same question, different data)
+Fixed question is a backend constant (clients cannot change it). Steps are serialized (one at a time).
+
+| Method | Path | Permission | Description |
+|---|---|---|---|
+| GET | /api/demo/question | `agent:run` | The fixed demonstration question |
+| POST | /api/demo/step | `agent:run` + `scenario:apply` | `{scenario: normal\|surge\|recovery, provider, model, temperature?, mode?}`. Applies the scenario atomically through the simulation module, verifies the data version and metrics changed, asks the fixed question on live data (no caching), saves it as the next "Run N". Returns the run, `run_count` and `metric_comparison`. |
+| GET | /api/demo/session | `agent:run` | Saved runs with scenario name, data version, patient record count, metrics, tools executed, retrieved policies, final answer, provider/model, latency, tokens, per-run `verification`, plus `metric_comparison` (per metric: values per run, `differs`, deltas vs previous run, derived from data) |
+| POST | /api/demo/session/reset | `scenario:reset` | Reloads the Normal baseline (data_version still increases) and deletes the saved demo runs so the demo can be replayed |
+
+A step refuses to continue (409 `demo_verification_failed`) if the data version did not change after applying the
+scenario, or if the agent run did not use the fixed question on that data version. A failed step saves no demo run;
+if the scenario was already applied it stays applied (its data_version advanced). If the scenario is already loaded,
+the step still advances the version and reports `metrics_changed: false` with a note. Audit actions: `demo.step`, `demo.reset`.
+
+## Model comparison (Phase 7)
+**Demonstration comparison, not a formal benchmark.** One scenario snapshot, one set of tool results and one
+retrieved policy context are computed first; every selected model then answers from the byte-identical frozen prompt
+(`context_sha256`, recorded per model and verified equal). Models answer sequentially. Permission: `comparison:run`
+(presenter, admin). Each run publishes a `comparison.run` audit event.
+
+| Method | Path | Description |
+|---|---|---|
+| POST | /api/comparison/run | `{question?, selections:[{provider, model, temperature?}]}` with 2-6 unique selections. `question` defaults to the fixed demonstration question. |
+| GET | /api/comparison/runs | Paginated history (`limit` 1-100, `offset`, `data_version` filter), newest first |
+| GET | /api/comparison/runs/{id} | One full run |
+
+Response: `label`, `scoring_note`, `status` (`completed` / `partial` / `failed`), `data_version_consistent`,
+`identical_context_verified`, `shared_context` (scenario, data_version, snapshot_metrics, tools_executed,
+retrieved_policies, context_sha256) and `results[]` per selection: status (`completed` / `failed` / `not_configured`),
+answer, latency_ms (same wall-clock measure for all), usage, estimated_cost_usd (null when unknown, never guessed),
+tool_calling_supported, data_disclosure, scores, citation_check.
+
+- Unconfigured models are reported (`not_configured` with the env var to set), never silently dropped; one model
+  failing does not fail the run. If none can be used: 409 `no_model_available`.
+- If the data changes while the shared context is being prepared: 409 `data_changed_during_comparison`, no model is
+  called. If it changes while models answer, the run is stored with `data_version_consistent=false`.
+- Scoring (heuristics documented in `domain/comparison_scoring.py`): `accuracy` (8 key metrics compared with the true
+  snapshot; wrong numbers listed), `completeness` (5 sections + citation + scenario/version stated), `relevance`
+  (6 topic groups, minus 0.25 for clinical-advice terms), `citation_correctness` (verified / total against what was
+  actually retrieved; null when nothing is cited) and `overall_demo_score` (mean of the available scores).
+  The scores cannot judge reasoning quality and can miss unusual phrasings of a correct number.

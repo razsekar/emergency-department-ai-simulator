@@ -19,8 +19,20 @@ describe('App shell', () => {
     await fixture.whenStable();
     const el: HTMLElement = fixture.nativeElement;
     expect(el.textContent).toContain('SIMULATION MODE');
-    expect(NAV_ITEMS.length).toBe(10);
-    expect(el.querySelectorAll('mat-nav-list a').length).toBe(10);
+    expect(NAV_ITEMS.length).toBe(11); // the 10 original pages plus Demo Mode
+    expect(el.querySelectorAll('nav.navlist a.nav-link').length).toBe(NAV_ITEMS.length);
+    TestBed.inject(HttpTestingController).match(() => true);
+  });
+
+  it('keeps the toolbar on one row: three status chips in one group, names still readable by assistive tech', async () => {
+    const fixture = TestBed.createComponent(App);
+    await fixture.whenStable();
+    const el: HTMLElement = fixture.nativeElement;
+    const group = el.querySelector('.toolbar [role="group"][aria-label="System status"]');
+    expect(group).not.toBeNull();
+    const chips = [...(group as Element).querySelectorAll('.chip')];
+    expect(chips.map((c) => c.querySelector('.chip-name')?.textContent)).toEqual(['Backend', 'Database', 'pgvector']);
+    expect(chips.every((c) => (c.getAttribute('title') ?? '').includes(':'))).toBe(true);
     TestBed.inject(HttpTestingController).match(() => true);
   });
 });

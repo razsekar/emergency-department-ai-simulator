@@ -26,4 +26,5 @@ export const Permissions = {
   AiChat: 'ai:chat',
   ModelsRead: 'models:read',
   ModelsConfigure: 'models:configure',
+  AgentRun: 'agent:run',
 } as const;

@@ -67,3 +67,20 @@ Migration commands (in the backend container): `alembic upgrade head`, `alembic 
   (completed/failed), error, created_by. Indexed on created_at, data_version and (run_type, created_at).
 - `ai_orchestration.chat_sessions` and `chat_messages` (FK inside the schema; messages store sources and citation_check).
 - Upgrade just this branch with `alembic upgrade agent@head`; the container startup command (`upgrade heads`) applies it too.
+
+## Demonstration runs (migration 0700, branch label `demo`)
+- `ai_orchestration.demo_runs`: session_id, run_number/run_label ("Run 1"...), scenario key/name, data_version,
+  patient_record_count, metrics_snapshot, verification (before/after evidence), tools_executed, retrieved_policies,
+  question + sha256, final_answer, provider, model, latency, tokens, cost. Unique (session_id, run_number).
+- `analysis_run_id` links to `ai_orchestration.analysis_runs` by value only (no foreign key), so the `demo` and
+  `agent` migration branches stay independent.
+- The "current session" is the session of the newest saved run; reset deletes all demo runs.
+
+## Model comparison (migration 0600, branch label `comparison`)
+- `ai_orchestration.ai_comparison_runs`: question, scenario key/name and `data_version` (opaque copies),
+  `data_version_consistent`, `snapshot_metrics`, `shared_tools`, `shared_policies`, `context_sha256`, `selections`,
+  status (`completed`/`partial`/`failed`), created_by; indexes on created_at and data_version.
+- `ai_orchestration.ai_comparison_results`: one row per selected model (FK to the run inside the schema, cascade
+  delete, unique `(comparison_id, position)`): status (`completed`/`failed`/`not_configured`), error, answer, latency,
+  token counts, estimated cost (nullable), tool_calling_supported, data_disclosure, `context_sha256`, `scores`,
+  `citation_check`.

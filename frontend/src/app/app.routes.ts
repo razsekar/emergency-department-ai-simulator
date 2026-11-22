@@ -57,6 +57,25 @@ export const routes: Routes = [
     loadComponent: () => import('./features/simulator/simulator.page').then((m) => m.SimulatorPage),
   },
   // --- end F1 routes ---
+  // --- worker I routes ---
+  {
+    path: 'agent',
+    title: 'Agent Execution · ED Simulator',
+    loadComponent: () => import('./features/agent/agent.page').then((m) => m.AgentPage),
+  },
+  // --- end worker I routes ---
+  // --- worker J routes: demo mode and model comparison (no guards: the backend enforces RBAC) ---
+  {
+    path: 'demo',
+    title: 'Demo Mode · ED Simulator',
+    loadComponent: () => import('./features/demo/demo.page').then((m) => m.DemoPage),
+  },
+  {
+    path: 'comparison',
+    title: 'Response Comparison · ED Simulator',
+    loadComponent: () => import('./features/comparison/comparison.page').then((m) => m.ComparisonPage),
+  },
+  // --- end worker J routes ---
   ...NAV_ITEMS.map((nav) => ({
     path: nav.path,
     title: `${nav.label} · ED Simulator`,
