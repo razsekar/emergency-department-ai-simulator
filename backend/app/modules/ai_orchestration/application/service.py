@@ -111,7 +111,8 @@ class AgentService:
                 data_version_consistent=consistent, snapshot_metrics=snapshot.metrics, mode=outcome.mode,
                 fallback_reason=outcome.fallback_reason, tools_executed=[_tool_view(r) for r in results],
                 retrieved_docs=policies, citation_check=citation, provider=provider, model=model,
-                temperature=temperature, llm_calls=outcome.llm_calls, latency_ms=latency_ms,
+                # None (shown as "provider default") when the model rejected the value and it was not sent
+                temperature=temperature if outcome.temperature_applied else None, llm_calls=outcome.llm_calls, latency_ms=latency_ms,
                 prompt_tokens=outcome.prompt_tokens, completion_tokens=outcome.completion_tokens,
                 total_tokens=outcome.total_tokens, estimated_cost_usd=outcome.cost_usd,
                 data_disclosure=outcome.data_disclosure, answer=outcome.answer,

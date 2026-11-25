@@ -194,6 +194,8 @@ class ComparisonService:
             return {**base, "status": "failed", "error": _safe_error(exc), "scores": {}, "citation_check": {},
                     "latency_ms": int((time.perf_counter() - started) * 1000)}
         latency_ms = int((time.perf_counter() - started) * 1000)  # same wall-clock measure for every model
+        if not resp.temperature_applied:
+            base["temperature"] = None  # record what was actually sent
 
         answer = (resp.content or "").strip()
         if not answer:

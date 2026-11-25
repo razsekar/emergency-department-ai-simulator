@@ -346,3 +346,17 @@ def test_get_unknown_run_is_not_found(agent_state):
 
     with pytest.raises(NotFoundError):
         get_run(uuid.uuid4())
+
+
+# ------------------------------------------------------------------ temperature honesty
+@pytest.mark.parametrize("mode", ["native", "fallback"])
+def test_run_does_not_record_a_temperature_the_provider_never_received(agent_state, mode):
+    simulation.apply_scenario("normal")
+    dropped = reply("answer").model_copy(update={"temperature_applied": False})
+    res = run(ScriptedLlm([dropped], repeat_last=True), temperature=0.2, mode=mode)
+    assert res.temperature is None and get_run(res.id).temperature is None
+
+
+def test_run_records_a_temperature_that_was_applied(agent_state):
+    simulation.apply_scenario("normal")
+    assert run(ScriptedLlm([reply("answer")], repeat_last=True), temperature=0.2).temperature == 0.2

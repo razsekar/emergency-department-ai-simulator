@@ -140,6 +140,13 @@ def test_temperature_is_per_selection_and_recorded(normal):
     assert [r.temperature for r in res.results] == [0.0, 1.2]
 
 
+def test_a_dropped_temperature_is_recorded_as_provider_default(normal):
+    dropped = reply("answer").model_copy(update={"temperature_applied": False})
+    llm = PerModelLlm({"a": dropped, "b": snapshot_answer()})
+    res = ComparisonService(llm).run(question="Q?", selections=[sel("a", temperature=0.2), sel("b", temperature=0.2)])
+    assert [r.temperature for r in res.results] == [None, 0.2]
+
+
 # ------------------------------------------------------------------ scoring through the service
 def test_correct_and_wrong_answers_are_scored_against_the_true_metrics(normal):
     metrics = normal.metrics

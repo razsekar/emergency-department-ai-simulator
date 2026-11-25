@@ -7,13 +7,15 @@ Everything on screen is invented; the policies are fictional. Say this at the st
 
 | Item | State |
 |---|---|
-| Stack starts, migrations apply, backend and frontend automated tests pass | Backend: 600 passed, frontend: 150 passed (2026-11-25) |
+| Stack starts, migrations apply, backend and frontend automated tests pass | Backend: 625 passed, frontend: 150 passed (2026-11-25) |
 | Scenario numbers below (12/38/9 waiting and so on) | Verified by backend tests and, for Surge and Normal, by a browser run against the real backend |
 | Demo Mode backend with a **real LLM** (Ollama `llama3.2:3b`) | **Run 2026-11-22** (Normal, Surge, Recovery via the API with a real login): data, levels (GREEN/RED/GREEN) and citations correct; 6-7 minutes per answer on CPU. |
 | Demo Mode, Agent, AI Assistant and Comparison **screens** with Ollama | Run in headless Chrome 2026-11-25: all four completed, after raising the nginx timeout (300 s caused HTTP 504). Demo steps 6-7 min each, Agent about 6 min, Assistant 44 s, two-model comparison 9.5 min. |
-| Fixed after that run (automated tests; browser check pending) | Comparison accuracy no longer counts ratio lines or quoted policy limits as wrong numbers. Accuracy still counts unmentioned metrics against the score, so below 100% does not mean a number was wrong; comparisons saved before the fix keep their old scores. Uncited paragraphs now read "No policy citation". |
+| Fixed after that run (automated tests and headless Chrome check) | Comparison accuracy no longer counts ratio lines or quoted policy limits as wrong numbers. Accuracy still counts unmentioned metrics against the score, so below 100% does not mean a number was wrong; comparisons saved before the fix keep their old scores. Uncited paragraphs now read "No policy citation". |
 | Known defects seen in that run | Agent did not directly answer a GREEN/AMBER/RED question. Assistant answer had no citation and contradicted itself. |
-| Cloud providers | **Never run.** |
+| Cloud providers (`claude-haiku-5-5`, `gpt-6-luna`) | Run 2026-11-25. Agent, AI Assistant and Comparison **screens** passed at the default slider value 0.2 (4-29 s). Agent used native tool calling. The fixed demo question passed through the API only; the **Demo Mode screen has not been run with a cloud model**. Gemini and the larger Claude and OpenAI models have not been run. |
+| Temperature on cloud models | These models accept only temperature 1, so the app leaves other values out. The slider still shows your value; agent run details show "provider default". Do not use these models to demonstrate the effect of temperature. |
+| Comparison accuracy score | Fixed to ignore Markdown emphasis and per-area counts. It still recognises only certain phrasings, and unrecognised or omitted metrics lower the percentage, so use the "wrong numbers" list and do not read the percentage as correctness. |
 | Login and role checks against the running app | Anonymous requests were checked live (401 everywhere except health and login). A signed-in session on the running stack with your own `JWT_SECRET` and demo passwords has not been exercised by this guide; the automated tests cover login and roles. |
 | Ollama end to end | Run for Demo Mode only (see above). Too slow on CPU to use live. |
 | Operating level in answers | The backend computes the level deterministically from the escalation rule (highest level with at least two indicators; one RED raises it to at least AMBER) and gives the model a verified briefing. The model is told not to recompute it. The briefing is not yet shown in the UI. |

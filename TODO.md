@@ -30,7 +30,7 @@ Items are checked only when implemented AND verified (evidence in brackets).
 
 ## Phase 5: Generative AI
 - [x] LiteLLM provider layer, status, discovery, chat + SSE [mocked tests only]
-- [ ] Real call to at least one provider (needs your API key or Ollama)
+- [x] Real call to at least one provider [Ollama, claude-haiku-5-5, gpt-6-luna, 2026-11-25]
 - [ ] Chat/playground frontend
 
 ## Identity / Audit
@@ -42,7 +42,7 @@ Items are checked only when implemented AND verified (evidence in brackets).
 - [x] 7 tools, bounded 5-call loop, fallback mode, citation check, run history, demo-run endpoint, chat [302 backend tests pass; scripted fake LLM only]
 - [x] /api/agent/* served by the real app after rebuild [401 without token via nginx proxy]
 - [x] Real LLM run via Ollama llama3.2:3b, Demo Mode x3 [levels GREEN/RED/GREEN, data-correct, 348/347/415 s]
-- [ ] Real run with a cloud model and the Agent screen in a browser: NOT verified
+- [x] Real run with a cloud model and the Agent screen in a browser [headless Chrome 2026-11-25]
 - [ ] Agent Execution screen (frontend)
 
 ## Frontend screens (done, verified by agents + 69 unit tests)
@@ -53,12 +53,12 @@ Items are checked only when implemented AND verified (evidence in brackets).
 ## Phase 7: Model comparison
 - [x] Backend: shared snapshot/context, per-model answers, scoring heuristics, migration 0600 [370 backend tests pass; scripted fake LLM only]
 - [x] Response Comparison screen [mocked API in browser; 128 frontend tests pass]
-- [ ] Real multi-model run: NOT verified
+- [x] Real multi-model run [Ollama pair, and claude-haiku-5-5 with gpt-6-luna, 2026-11-25]
 
 ## Phase 8: Demonstration mode
 - [x] Backend: demo step/session/reset with version + question verification, migration 0700 [tests, incl. mutation check]
 - [x] Demo Mode screen, side-by-side Run 1/2/3 [mocked API in browser]
-- [ ] Full demo against the real backend with a real LLM: NOT verified (needs JWT secret/demo passwords in .env and a provider)
+- [x] Full demo against the real backend with a real LLM [Ollama, Demo Mode screen, 2026-11-25; not yet with a cloud model]
 - [ ] Wire RBAC + audit into simulation/analytics/queue/resource endpoints, then add login guards to routes
 - [ ] Rebuilt Docker frontend viewed in a browser by me
 ## Phase 9: Testing, security, documentation
@@ -77,8 +77,11 @@ Items are checked only when implemented AND verified (evidence in brackets).
 - [x] nginx proxy timeout raised to 3600 s (UI returned 504 at 300 s) [UI requests of 340-572 s succeeded]
 - [x] Comparison accuracy false positives fixed (ratio lines, quoted policy limits) [600 backend tests; 2 saved real answers rescored with no false wrong numbers]
 - [x] Uncited paragraphs labelled "No policy citation", headings untagged, comparison disclaimer shown once [150 frontend tests]
-- [ ] Browser check of the scorer and label fixes
-- [ ] Cloud-model comparison: NOT verified
+- [x] Browser check of the scorer and label fixes [headless Chrome 2026-11-25: new two-model comparison showed no false wrong numbers, one disclaimer; Demo and Agent views show new labels]
+- [x] Cloud models claude-haiku-5-5 and gpt-6-luna: Agent, Assistant, Comparison screens at slider 0.2 [headless Chrome 2026-11-25]
+- [x] Temperature values a model rejects are left out and recorded as provider default [625 backend tests]
+- [x] Comparison accuracy: Markdown emphasis ignored, per-area counts not treated as totals [625 backend tests; saved real answers show no false wrong numbers]
+- [ ] Demo Mode screen with a cloud model, Gemini, and larger cloud models: NOT verified
 - [ ] Deployment: unverified on Vercel/Railway; see DEPLOYMENT.md for the fixes needed (PORT, DATABASE_URL scheme, dev deps in image, sample_docs, model cache)
 
 ## Notes

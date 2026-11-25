@@ -57,6 +57,7 @@ class AgentOutcome:
     total_tokens: int | None = None
     cost_usd: float | None = None
     data_disclosure: str | None = None
+    temperature_applied: bool = True  # False once any call had to leave the requested temperature out
     executed: int = 0
 
     def add_response(self, resp: ChatResponse) -> None:
@@ -66,6 +67,7 @@ class AgentOutcome:
         self.total_tokens = _add(self.total_tokens, resp.usage.total_tokens)
         self.cost_usd = _add(self.cost_usd, resp.estimated_cost_usd)
         self.data_disclosure = resp.data_disclosure or self.data_disclosure
+        self.temperature_applied = self.temperature_applied and resp.temperature_applied
 
 
 def _add(total, value):

@@ -176,3 +176,44 @@ def test_real_data_section_with_band_annotations_is_scored_on_the_data_values_on
 ])
 def test_wrong_current_values_are_still_flagged(line, metric, value):
     assert score_accuracy(line, RECOVERY)["wrong_numbers"] == {metric: [value]}
+
+
+# ---- real cloud-model comparison: bold numbers were invisible (0%) and per-area counts were "wrong" ----
+@pytest.mark.parametrize("text", [
+    "**9** patients waiting. **10** beds available. **4** pending investigations.",
+    "Patients waiting: **9**. Beds available: __10__. Pending investigations: `4`.",
+    "**Patients waiting:** 9. **Beds available:** 10. **Pending investigations:** 4.",
+])
+def test_markdown_emphasis_does_not_hide_numbers(text):
+    acc = score_accuracy(text, RECOVERY)
+    assert acc["correct"] == 3 and acc["wrong_numbers"] == {}
+
+
+@pytest.mark.parametrize("line", [
+    "By department: Pediatric Emergency has 1 doctor on duty, who is busy, and Resuscitation has 1 nurse on duty.",
+    "Acute Care 4 available beds, Minor Injuries 2 available beds.",
+    "- **Pediatric Emergency:** 1 doctor on duty, 2 beds available",
+    "Resuscitation: nurses on duty 1.",
+    "Minor Injuries has 3 pending investigations.",
+])
+def test_counts_for_one_department_area_are_not_department_totals(line):
+    acc = score_accuracy(line, RECOVERY)
+    assert acc["wrong_numbers"] == {} and acc["correct"] == 0
+
+
+@pytest.mark.parametrize("line", [
+    "The emergency department has 3 doctors on duty.",
+    "Acute Care is the busiest area. There are 3 doctors on duty.",
+    "Minor Injuries has the highest occupancy; 3 doctors on duty overall.",
+    "Resuscitation is quiet.\nDoctors on duty: 3",
+    "**3** doctors on duty.",
+])
+def test_wrong_department_totals_are_still_flagged_near_area_names(line):
+    assert score_accuracy(line, RECOVERY)["wrong_numbers"] == {"doctors_on_duty": [3.0]}
+
+
+def test_every_simulated_department_area_is_known_to_the_scorer():
+    from app.modules.ai_orchestration.domain.comparison_scoring import AREA_NAMES
+    from app.modules.simulation.application.generator import DEPARTMENT_NAMES
+
+    assert {n.lower() for n in DEPARTMENT_NAMES.values()} == set(AREA_NAMES)

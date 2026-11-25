@@ -111,3 +111,21 @@ def test_api_key_is_passed_to_litellm_but_never_returned(monkeypatch):
     r = svc({"mock_response": "x"}).complete(req())
     assert seen["api_key"].startswith("sk-test-SECRET")
     assert "SECRET" not in r.model_dump_json()
+
+
+# ---- real cloud models that accept only temperature=1 (found with real keys: the UI default 0.2 failed) ----
+@pytest.mark.parametrize(("provider", "model"), [
+    ("anthropic", "claude-haiku-5-5"), ("anthropic", "claude-opus-5-5"), ("openai", "gpt-6-luna"),
+])
+def test_a_temperature_value_the_model_rejects_is_left_out(provider, model):
+    kw, applied = lg.LiteLlmGateway()._kwargs(req(provider=provider, model=model, temperature=0.2))
+    assert "temperature" not in kw and applied is False
+
+
+@pytest.mark.parametrize(("provider", "model", "temperature"), [
+    ("anthropic", "claude-haiku-5-5", 1.0), ("openai", "gpt-6-luna", 1.0),
+    ("ollama", "llama3.2:3b", 0.2), ("openai", "zzz-unmapped-model", 0.2),
+])
+def test_a_temperature_value_the_model_accepts_is_still_sent(provider, model, temperature):
+    kw, applied = lg.LiteLlmGateway()._kwargs(req(provider=provider, model=model, temperature=temperature))
+    assert kw["temperature"] == temperature and applied is True

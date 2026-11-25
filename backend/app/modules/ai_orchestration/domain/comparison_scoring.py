@@ -12,6 +12,8 @@ Scores are fractions in [0, 1], or None when the measure does not apply (for exa
                         phrasing was found. Wrong numbers are listed explicitly. Policy limits ("31 to 60",
                         "more than 30", "15 or fewer", "<=30") and per-doctor/per-nurse ratios are not treated as
                         statements about current values, so a wrong value phrased as a limit is not detected.
+                        Markdown emphasis is ignored. A number in a clause that names a department area before it is
+                        an area count, not a department total, so a wrong total phrased that way is not detected.
   completeness          fraction of REQUIRED_ELEMENTS present (five labelled sections, at least one citation, and
                         the scenario name or data version stated).
   relevance             fraction of TOPIC_GROUPS addressed (waiting time, beds, staffing, investigations, policy,
@@ -48,6 +50,12 @@ _LIMIT = re.compile(
     rf"|{_NUM}(?:\s*min(?:ute)?s?)?\s+or\s+(?:fewer|more|less)\b",
     re.IGNORECASE,
 )
+
+_EMPHASIS = re.compile(r"\*+|__|`")
+# The simulation's department areas (a test keeps this in step with the generator).
+AREA_NAMES = ("acute care", "resuscitation", "minor injuries", "pediatric emergency")
+_AREA = re.compile("|".join(AREA_NAMES), re.IGNORECASE)
+_CLAUSE_END = re.compile(r"[.!?](?=\s|$)|;|\n")
 
 METRIC_PATTERNS: dict[str, list[str]] = {
     "patients_waiting": [
@@ -125,15 +133,20 @@ def _matches(claimed: float, truth: Any) -> bool:
     return claimed == truth
 
 
+def _is_area_count(text: str, match: re.Match) -> bool:
+    clause_start = max((end.end() for end in _CLAUSE_END.finditer(text, 0, match.start())), default=0)
+    return bool(_AREA.search(text, clause_start, match.end()))
+
+
 def _claims(answer: str, metric: str) -> list[float]:
     found: list[float] = []
     for pattern in _COMPILED[metric]:
-        found += [float(m.group(1)) for m in pattern.finditer(answer)]
+        found += [float(m.group(1)) for m in pattern.finditer(answer) if not _is_area_count(answer, m)]
     return found
 
 
 def score_accuracy(answer: str | None, metrics: dict[str, Any]) -> dict[str, Any]:
-    text = _LIMIT.sub(" [limit] ", answer or "")
+    text = _LIMIT.sub(" [limit] ", _EMPHASIS.sub("", answer or ""))
     per_metric: dict[str, dict[str, Any]] = {}
     correct = 0
     for metric in KEY_METRICS:

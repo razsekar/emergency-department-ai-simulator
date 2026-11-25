@@ -31,15 +31,20 @@ def _full_model(provider: str, model: str) -> str:
     return f"{SPECS[Provider(provider)].litellm_prefix}/{model}"
 
 
-def _supports_temperature(provider: str, model: str) -> bool:
-    """False only when LiteLLM positively reports that `temperature` is unsupported for this model."""
+def _accepts_temperature(provider: str, model: str, temperature: float) -> bool:
+    """False only when LiteLLM positively reports that this model rejects `temperature`, either entirely or for this
+    value (several current cloud models accept only 1). LiteLLM would otherwise fail the call before sending it."""
+    prefix = SPECS[Provider(provider)].litellm_prefix
     try:
-        params = litellm.get_supported_openai_params(
-            model=model, custom_llm_provider=SPECS[Provider(provider)].litellm_prefix
-        )
+        params = litellm.get_supported_openai_params(model=model, custom_llm_provider=prefix)
+        if params is not None and "temperature" not in params:
+            return False
+        litellm.get_optional_params(model=model, custom_llm_provider=prefix, temperature=temperature)
+    except litellm.UnsupportedParamsError:
+        return False
     except Exception:  # noqa: BLE001 - unknown model => don't block, let the provider decide
         return True
-    return True if params is None else "temperature" in params
+    return True
 
 
 def _usage(resp: Any) -> Usage:
@@ -99,7 +104,7 @@ class LiteLlmGateway:
             kw["num_ctx"] = get_settings().ollama_num_ctx  # else Ollama truncates long prompts at 4096 without an error
         temp_applied = True
         if req.temperature is not None:
-            if _supports_temperature(req.provider, req.model):
+            if _accepts_temperature(req.provider, req.model, req.temperature):
                 kw["temperature"] = req.temperature
             else:
                 temp_applied = False
