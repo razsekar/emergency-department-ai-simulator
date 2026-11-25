@@ -81,7 +81,8 @@ Items are checked only when implemented AND verified (evidence in brackets).
 - [x] Cloud models claude-haiku-5-5 and gpt-6-luna: Agent, Assistant, Comparison screens at slider 0.2 [headless Chrome 2026-11-25]
 - [x] Temperature values a model rejects are left out and recorded as provider default [625 backend tests]
 - [x] Comparison accuracy: Markdown emphasis ignored, per-area counts not treated as totals [625 backend tests; saved real answers show no false wrong numbers]
-- [ ] Demo Mode screen with a cloud model, Gemini, and larger cloud models: NOT verified
+- [x] Demo Mode screen with claude-haiku-5-5: GREEN/RED/GREEN, citations verified [headless Chrome 2026-11-25]
+- [ ] Demo Mode screen with gpt-6-luna; Gemini and larger cloud models: NOT verified
 - [ ] Deployment: unverified on Vercel/Railway; see DEPLOYMENT.md for the fixes needed (PORT, DATABASE_URL scheme, dev deps in image, sample_docs, model cache)
 
 ## Notes
