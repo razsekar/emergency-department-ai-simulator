@@ -59,6 +59,28 @@ def run(llm, **kw):
     return AgentService(llm).run(question=kw.pop("question", "How is the ED doing?"), provider="ollama", model="fake", **kw)
 
 
+# ------------------------------------------------------------------ output cap
+def test_every_model_call_carries_the_configured_output_cap(agent_state, monkeypatch):
+    """A slow local model must not be able to generate without bound (the real Ollama demo timed out)."""
+    from app.platform.config import get_settings
+
+    monkeypatch.setenv("AGENT_MAX_OUTPUT_TOKENS", "321")
+    get_settings.cache_clear()
+    try:
+        simulation.apply_scenario("normal")
+        llm = ScriptedLlm(native_script())
+        run(llm)
+        assert llm.requests and all(r.max_tokens == 321 for r in llm.requests)
+
+        simulation.apply_scenario("normal")
+        fb = ScriptedLlm([fallback_answer])
+        run(fb, mode="fallback")
+        assert fb.requests and all(r.max_tokens == 321 for r in fb.requests)
+    finally:
+        monkeypatch.delenv("AGENT_MAX_OUTPUT_TOKENS")
+        get_settings.cache_clear()
+
+
 # ------------------------------------------------------------------ native loop
 def test_native_run_is_grounded_in_tool_results_and_persisted(agent_state):
     simulation.apply_scenario("normal")

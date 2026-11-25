@@ -20,7 +20,7 @@ describe('AnswerView', () => {
   };
   const states = () => [...el.querySelectorAll('.para')].map((p) => p.getAttribute('data-state'));
 
-  it('uses the backend check: verified paragraph is ok, invented citation is bad, uncited text is general', async () => {
+  it('uses the backend check: verified paragraph is ok, invented citation is bad, uncited text is neutral', async () => {
     await render({
       citations: [
         { document: 'Hospital Escalation Procedures', page: 2, verified: true },
@@ -30,8 +30,22 @@ describe('AnswerView', () => {
     expect(states()).toEqual(['ok', 'none', 'bad']);
     expect(el.textContent).toContain('Cites retrieved policy (verified)');
     expect(el.textContent).toContain('Cites a source that was NOT retrieved (unverified)');
-    expect(el.textContent).toContain('General explanation (not from policy)');
+    expect(el.textContent).toContain('No policy citation');
+    expect(el.textContent).not.toContain('General explanation (not from policy)');
     expect([...el.querySelectorAll('.cite')].map((c) => c.getAttribute('data-state'))).toEqual(['ok', 'bad']);
+  });
+
+  it('does not tag headings, and never calls uncited data lines a general explanation', async () => {
+    fixture = TestBed.createComponent(AnswerView);
+    fixture.componentRef.setInput(
+      'answer',
+      '**Current situation (from data)**\n\n- Patients waiting: 9 patients\n\n## Bottlenecks\n\n**Note**: waiting is low.',
+    );
+    await fixture.whenStable();
+    const tags = [...(fixture.nativeElement as HTMLElement).querySelectorAll('.para')].map(
+      (p) => p.querySelector('.tag')?.textContent?.trim() ?? '',
+    );
+    expect(tags).toEqual(['', 'No policy citation', '', 'No policy citation']);
   });
 
   it('never claims verification when no backend check is available', async () => {

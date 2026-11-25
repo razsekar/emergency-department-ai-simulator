@@ -119,3 +119,60 @@ def test_overall_score_is_the_mean_of_available_scores_and_carries_the_disclaime
                                         scenario_name=None, data_version=None))
     assert no_cites["citation_correctness"]["score"] is None  # excluded from the mean, not counted as zero
     assert no_cites["overall_demo_score"] is not None
+
+
+# ---- false positives seen in a real Ollama comparison (2026-11-25): correct answers were scored 0% ----
+RECOVERY = {
+    "patients_waiting": 9, "avg_wait_minutes": 18.0, "max_wait_minutes": 29.2, "beds_available": 10,
+    "beds_total": 16, "doctors_on_duty": 7, "nurses_on_duty": 12, "pending_investigations": 4,
+}
+
+
+@pytest.mark.parametrize("line", [
+    "Waiting patients per doctor on duty: 1.3 ratio",
+    "Waiting patients per nurse on duty: 0.8 ratio",
+    "high waiting patients per doctor on duty ratio (1.3) and waiting patients per nurse on duty ratio (0.8)",
+    "There are 1.3 waiting patients per doctor on duty.",
+])
+def test_staffing_ratios_are_not_read_as_head_counts_or_queue_length(line):
+    assert score_accuracy(line, RECOVERY)["wrong_numbers"] == {}
+
+
+@pytest.mark.parametrize("line", [
+    "AMBER (Elevated load): average waiting time 31 to 60 minutes; 16 to 30 patients waiting; 2 to 4 available "
+    "beds; 4 to 6 waiting patients per doctor; 11 to 20\npending investigation requests.",
+    "RED (Surge): average waiting time above 60 minutes; more than 30 patients waiting; 1 or fewer available beds; "
+    "more than 6 waiting patients per doctor; more than 20 pending investigation requests.",
+    "GREEN: average waiting time 30 minutes or less; 15 or fewer patients\nwaiting; 5 or more available beds; "
+    "3 or fewer waiting patients per doctor on duty; 10 or fewer pending investigation requests.",
+    "Up to 10 pending requests: normal operation. Average waiting time within the GREEN threshold of 30 minutes or less.",
+    "Average waiting time: GREEN <=30; AMBER 31-60; RED >60. Patients waiting: GREEN <=15; AMBER 16-30; RED >30.",
+    "Available beds (bands: GREEN >=5; AMBER 2–4; RED <=1)",
+    "The surge observation area (up to 4 additional beds available) may be opened.",
+])
+def test_quoted_policy_thresholds_are_not_claims_about_current_data(line):
+    assert score_accuracy(line, RECOVERY)["wrong_numbers"] == {}
+
+
+def test_real_data_section_with_band_annotations_is_scored_on_the_data_values_only():
+    text = (
+        "- Average waiting time: 18 min -> GREEN (bands: GREEN <=30; AMBER 31-60; RED >60)\n"
+        "- Patients waiting: 9 patients -> GREEN (bands: GREEN <=15; AMBER 16-30; RED >30)\n"
+        "- Available beds: 10 beds -> GREEN (bands: GREEN >=5; AMBER 2-4; RED <=1)\n"
+        "- Waiting patients per doctor on duty: 1.3 ratio\n"
+        "- Pending investigation requests: 4 requests\n"
+    )
+    acc = score_accuracy(text, RECOVERY)
+    assert acc["wrong_numbers"] == {} and acc["correct"] == 4
+
+
+@pytest.mark.parametrize(("line", "metric", "value"), [
+    ("Average waiting time: 30 min -> GREEN (bands: GREEN <=30)", "avg_wait_minutes", 30.0),
+    ("Patients waiting: 30 patients", "patients_waiting", 30.0),
+    ("Doctors on duty: 3", "doctors_on_duty", 3.0),
+    ("2 nurses on duty", "nurses_on_duty", 2.0),
+    ("There are 20 pending investigations.", "pending_investigations", 20.0),
+    ("Beds available: 4 (up to 4 more may be opened)", "beds_available", 4.0),
+])
+def test_wrong_current_values_are_still_flagged(line, metric, value):
+    assert score_accuracy(line, RECOVERY)["wrong_numbers"] == {metric: [value]}

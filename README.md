@@ -43,7 +43,7 @@ colima start                # skip if Docker is already running
 docker compose up -d --build
 ```
 
-Open http://localhost:4200 (the app) and http://localhost:8000/api/docs (API docs). Postgres is on host port 5433. Migrations run automatically when the backend starts.
+Open http://localhost:4200 (the app) and http://localhost:8000/api/docs (API docs). Sign in with `demo_admin`, `demo_presenter` or `demo_viewer` and the password you set in `.env`. Postgres is on host port 5433. Migrations run automatically when the backend starts.
 
 ### Configure `.env`
 
@@ -73,8 +73,15 @@ docker compose --profile ollama up -d          # starts the ollama service; down
 docker compose exec ollama ollama pull <model> # you choose a model; pick one that supports tool calling for native agent mode
 ```
 
-Set `OLLAMA_BASE_URL=http://ollama:11434` in `.env` when using this profile (the default points to Ollama on the host, `http://host.docker.internal:11434`),
-then `docker compose up -d --force-recreate backend`. Models without tool calling still work through the labelled fallback mode. Ollama model discovery, and these Ollama steps, have not been run end to end.
+Set `OLLAMA_BASE_URL=http://ollama:11434` in `.env` when using this profile (use `http://host.docker.internal:11434` for an Ollama on the host),
+then `docker compose up -d --force-recreate backend`. Models without tool calling still work through the labelled fallback mode.
+
+Verified end to end with `llama3.2:3b` (Demo Mode, Normal then Surge then Recovery, 2026-11-22). Things to know:
+
+- **Speed:** on CPU a 3B model needs about 6-7 minutes per agent answer (about 3 tokens/s). That is too slow to run live; use a cloud model or a GPU for the seminar, and keep Ollama as the offline backup.
+- **Context window:** Ollama truncates the start of any prompt above its default 4096-token window without an error. The backend therefore sends `num_ctx` (`OLLAMA_NUM_CTX`, default 8192). Raise it if you add longer documents.
+- **Limits:** `LLM_TIMEOUT_SECONDS` (default 1200) and `AGENT_MAX_OUTPUT_TOKENS` (default 1200) bound each call.
+- **Quality:** a 3B model gets the data and levels right but often pastes policy text rather than summarising. Do not judge the method by it.
 
 ## Reset
 

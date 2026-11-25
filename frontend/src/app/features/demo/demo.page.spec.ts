@@ -100,7 +100,7 @@ describe('DemoPage', () => {
     expect(cite.textContent).toContain('Hospital Escalation Procedures');
     expect(cite.getAttribute('data-state')).toBe('ok');
     expect(el.textContent).toContain('Cites retrieved policy');
-    expect(el.textContent).toContain('General explanation (not from policy)');
+    expect(el.textContent).toContain('No policy citation');
   });
 
   it('shows the backend message when a step fails (e.g. 409 verification) and re-enables the buttons', async () => {

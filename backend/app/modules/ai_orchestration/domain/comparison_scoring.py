@@ -9,7 +9,9 @@ Scores are fractions in [0, 1], or None when the measure does not apply (for exa
   accuracy              fraction of the KEY_METRICS whose stated value matches the true snapshot value. A metric is
                         "correct" when every number the answer states for it matches (floats within +/-0.5, integers
                         exactly), "wrong" when any stated number differs, and "not_mentioned" when no recognised
-                        phrasing was found. Wrong numbers are listed explicitly.
+                        phrasing was found. Wrong numbers are listed explicitly. Policy limits ("31 to 60",
+                        "more than 30", "15 or fewer", "<=30") and per-doctor/per-nurse ratios are not treated as
+                        statements about current values, so a wrong value phrased as a limit is not detected.
   completeness          fraction of REQUIRED_ELEMENTS present (five labelled sections, at least one citation, and
                         the scenario name or data version stated).
   relevance             fraction of TOPIC_GROUPS addressed (waiting time, beds, staffing, investigations, policy,
@@ -37,9 +39,19 @@ _NUM = r"(\d+(?:\.\d+)?)"
 # directly, so "waiting (data version 2)" never yields the version number.
 _SEP = r"(?:\s|[:=(~]|\bis\b|\bwas\b|\bare\b|\bof\b|\bat\b|\babout\b|\bapproximately\b|\baround\b|\broughly\b)*"
 
+# Quoted policy limits and band ranges are not claims about the current data; they are blanked before matching.
+# The "[limit]" marker is not part of _SEP, so a label can never attach to a number across it.
+_LIMIT = re.compile(
+    rf"{_NUM}\s*(?:to|-|–)\s*{_NUM}"
+    rf"|(?:\bup\s+to|\b(?:more|fewer|less|greater)\s+than|\babove|\bbelow|\bover|\bunder|\bat\s+(?:least|most)"
+    rf"|<=|>=|≤|≥|<|(?<![-=])>)\s*{_NUM}"
+    rf"|{_NUM}(?:\s*min(?:ute)?s?)?\s+or\s+(?:fewer|more|less)\b",
+    re.IGNORECASE,
+)
+
 METRIC_PATTERNS: dict[str, list[str]] = {
     "patients_waiting": [
-        rf"{_NUM}\s+(?:patients?|visits?|people)?\s*(?:are\s+|were\s+)?(?:currently\s+)?waiting\b",
+        rf"{_NUM}\s+(?:patients?|visits?|people)?\s*(?:are\s+|were\s+)?(?:currently\s+)?waiting\b(?!\s+(?:patients?\s+)?per\b)",
         rf"patients?\s+waiting{_SEP}{_NUM}",
         rf"waiting\s+(?:patients?|queue|count|room){_SEP}{_NUM}",
     ],
@@ -63,11 +75,11 @@ METRIC_PATTERNS: dict[str, list[str]] = {
     ],
     "doctors_on_duty": [
         rf"{_NUM}\s+doctors?\s+(?:are\s+)?on\s+duty",
-        rf"doctors?\s+on\s+duty{_SEP}{_NUM}",
+        rf"(?<!per\s)doctors?\s+on\s+duty{_SEP}{_NUM}",
     ],
     "nurses_on_duty": [
         rf"{_NUM}\s+nurses?\s+(?:are\s+)?on\s+duty",
-        rf"nurses?\s+on\s+duty{_SEP}{_NUM}",
+        rf"(?<!per\s)nurses?\s+on\s+duty{_SEP}{_NUM}",
     ],
     "pending_investigations": [
         rf"{_NUM}\s+(?:pending\s+)?investigations?(?:\s+requests?)?(?:\s+(?:are|were)\s+)?\s*pending",
@@ -121,7 +133,7 @@ def _claims(answer: str, metric: str) -> list[float]:
 
 
 def score_accuracy(answer: str | None, metrics: dict[str, Any]) -> dict[str, Any]:
-    text = answer or ""
+    text = _LIMIT.sub(" [limit] ", answer or "")
     per_metric: dict[str, dict[str, Any]] = {}
     correct = 0
     for metric in KEY_METRICS:

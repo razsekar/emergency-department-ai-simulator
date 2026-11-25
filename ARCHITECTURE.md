@@ -123,6 +123,18 @@ GET /api/demo/session  -> Run 1/2/3 plus a metric-by-metric diff computed from s
 
 Steps are serialised by an in-process lock, so run one backend process.
 
+## Escalation level and verified briefing
+
+Small models misapply threshold rules, so the level is not left to the LLM. `analytics.domain.escalation.assess_escalation` (pure, no I/O)
+classes six indicators (average wait, patients waiting, free beds, waiting per doctor, waiting per nurse, pending investigations) as
+GREEN/AMBER/RED using the bands in the fictional DGH-ESC-004 policy. The level is RED if at least two indicators are RED; AMBER if at least two
+are AMBER or worse, or any is RED; otherwise GREEN. Missing metrics are UNKNOWN and not counted; zero staff with patients waiting is RED.
+
+`ai_orchestration.application.briefing` turns the snapshot and assessment into a "VERIFIED BRIEFING" (scenario, data version, level, rule, indicators).
+The agent passes it per call (never stored on the shared runner) and the comparison service includes it in the hashed shared prompt, so every model
+gets the identical briefing. Prompts tell the model to use the level as given. Limits: the thresholds are copied from the fictional policy text, so
+they must be kept in sync by hand; the level is not yet returned by the API or shown in the UI.
+
 ## Model comparison
 
 `POST /api/comparison/run` computes one snapshot, one set of tool results and one policy context, then each selected model answers from a byte-identical
@@ -169,6 +181,8 @@ Knowledge Base, AI Assistant, Agent Execution, Model Playground, Response Compar
 calls `/api/...` with relative paths (nginx or the dev proxy forwards them). A persistent SIMULATION MODE banner is always visible.
 
 ## Runtime notes
+
+- LLM calls carry an explicit timeout (`LLM_TIMEOUT_SECONDS`, default 1200 s) and the agent caps its answer at `AGENT_MAX_OUTPUT_TOKENS` (1200). Ollama calls pass `num_ctx` (`OLLAMA_NUM_CTX`, 8192): Ollama otherwise truncates the start of prompts above 4096 tokens silently.
 
 - Backend runs on Python 3.12 in Docker (the host's Python 3.14 lacks wheels for the ML stack).
 - Container runtime on the development machine is Colima (`colima start`).

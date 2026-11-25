@@ -135,7 +135,10 @@ const SCORE_LABELS = [
     @if (result(); as r) {
       <section aria-label="Comparison result">
         <h2>Result</h2>
-        <p class="label"><mat-icon aria-hidden="true">info</mat-icon><span>{{ r.label }} {{ r.scoring_note }}</span></p>
+        <p class="label" data-testid="scoring-note">
+          <mat-icon aria-hidden="true">info</mat-icon>
+          <span>{{ r.scoring_note.startsWith(r.label) ? r.scoring_note : r.label + ' ' + r.scoring_note }}</span>
+        </p>
 
         @if (r.status !== 'completed') {
           <p class="warn" role="alert">

@@ -16,8 +16,14 @@ from app.modules.analytics.application.contracts import (
     StaffSummary,
 )
 from app.modules.analytics.application.service import get_dashboard_metrics, get_resource_utilization
+from app.modules.analytics.domain.escalation import EscalationAssessment, IndicatorResult, assess_escalation
+
+# assess_escalation(metrics: Mapping) -> EscalationAssessment
+#   Deterministic GREEN/AMBER/RED operating level from a metrics dict (the keys the dashboard/snapshot use:
+#   patients_waiting, avg_wait_minutes, beds_available, doctors_on_duty, nurses_on_duty, pending_investigations).
+#   Bands mirror the fictional demo escalation policy; see domain/escalation.py for the exact rule and limits.
 
 __all__ = [
-    "BedSummary", "DashboardMetrics", "FacilityLoad", "ResourceUtilization", "StaffSummary",
-    "get_dashboard_metrics", "get_resource_utilization",
+    "BedSummary", "DashboardMetrics", "EscalationAssessment", "FacilityLoad", "IndicatorResult",
+    "ResourceUtilization", "StaffSummary", "assess_escalation", "get_dashboard_metrics", "get_resource_utilization",
 ]

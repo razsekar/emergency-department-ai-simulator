@@ -18,6 +18,7 @@ from app.modules.ai_orchestration.application.ports import LlmPort
 from app.modules.ai_orchestration.domain import prompts
 from app.modules.ai_orchestration.domain.plan import PLAN_HEAD, policy_topics
 from app.modules.model_providers.public import ChatMessage, ChatRequest, ChatResponse, ProviderCallError
+from app.platform.config import get_settings
 
 log = logging.getLogger("app.ai_orchestration")
 
@@ -102,7 +103,9 @@ class AgentRunner:
 
     # ------------------------------------------------------------------ entry point
     def run(self, *, question: str, provider: str, model: str, temperature: float | None, mode: str,
-            run_id: uuid.UUID) -> AgentOutcome:
+            run_id: uuid.UUID, briefing: str | None = None) -> AgentOutcome:
+        # `briefing` (verified, application-computed facts for THIS run) is passed down as an argument, never
+        # stored on the runner: the runner is shared between concurrent requests.
         reason: str | None = None
         if mode == "fallback":
             reason = "Fallback mode requested"
@@ -116,19 +119,20 @@ class AgentRunner:
         try:
             if reason is None:
                 try:
-                    return self._native(out, question, provider, model, temperature, run_id)
+                    return self._native(out, question, provider, model, temperature, run_id, briefing)
                 except _NeedFallback as fb:
                     out.mode, out.fallback_reason = "fallback", fb.reason  # usage so far stays on `out`
-            return self._fallback(out, question, provider, model, temperature, run_id)
+            return self._fallback(out, question, provider, model, temperature, run_id, briefing)
         except (AgentIncomplete, ProviderCallError) as exc:
             raise AgentFailure(exc, out) from exc
 
     # ------------------------------------------------------------------ native tool calling
-    def _native(self, out: AgentOutcome, question, provider, model, temperature, run_id) -> AgentOutcome:
+    def _native(self, out: AgentOutcome, question, provider, model, temperature, run_id,
+                briefing: str | None = None) -> AgentOutcome:
         max_tools = tools.MAX_TOOL_INTERACTIONS
         messages = [
             ChatMessage(role="system", content=prompts.AGENT_SYSTEM_PROMPT.format(max_tools=max_tools)),
-            ChatMessage(role="user", content=question),
+            ChatMessage(role="user", content=f"{briefing}\n\nQuestion: {question}" if briefing else question),
         ]
         offered = tools.openai_tools()
         nudged = False
@@ -136,6 +140,7 @@ class AgentRunner:
         while out.llm_calls < max_tools + EXTRA_LLM_CALLS:
             allow = out.executed < max_tools
             request = ChatRequest(provider=provider, model=model, messages=messages, temperature=temperature,
+                                  max_tokens=get_settings().agent_max_output_tokens,
                                   tools=offered if allow else None)
             try:
                 resp = self._llm.complete(request)
@@ -178,7 +183,8 @@ class AgentRunner:
         raise AgentIncomplete("The model did not produce a final answer within the allowed number of steps.")
 
     # ------------------------------------------------------------------ deterministic plan + synthesis
-    def _fallback(self, out: AgentOutcome, question, provider, model, temperature, run_id) -> AgentOutcome:
+    def _fallback(self, out: AgentOutcome, question, provider, model, temperature, run_id,
+                  briefing: str | None = None) -> AgentOutcome:
         outputs: dict[str, dict[str, Any] | None] = {}
         for name, args in PLAN_HEAD:
             outputs[name] = self._run_planned(out, name, args, run_id)
@@ -187,9 +193,12 @@ class AgentRunner:
             self._run_planned(out, "retrieve_hospital_protocol", {"topics": topics, "k": 2}, run_id)
 
         body = "\n\n".join(_render_for_fallback(r) for r in out.results)
-        user = f"Question: {question}\n\nVerified tool results (fetched just now from the live simulation):\n\n{body}"
+        lead = f"{briefing}\n\n" if briefing else ""
+        user = (f"{lead}Question: {question}\n\n"
+                f"Verified tool results (fetched just now from the live simulation):\n\n{body}")
         request = ChatRequest(
             provider=provider, model=model, temperature=temperature,
+            max_tokens=get_settings().agent_max_output_tokens,
             messages=[ChatMessage(role="system", content=prompts.FALLBACK_SYSTEM_PROMPT),
                       ChatMessage(role="user", content=user)],
         )

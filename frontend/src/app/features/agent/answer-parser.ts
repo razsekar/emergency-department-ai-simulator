@@ -14,7 +14,12 @@ export interface AnswerParagraph {
   /** 'policy' paragraphs carry at least one citation marker; 'general' ones do not. */
   kind: 'policy' | 'general';
   segments: AnswerSegment[];
+  /** A lone heading line: it makes no statement, so views do not tag it. */
+  heading: boolean;
 }
+
+/** One line that is entirely bold or a markdown heading. */
+const HEADING = /^(?:\*\*(?:(?!\*\*).)+\*\*:?|#{1,6}\s.+)$/;
 
 function norm(name: string): string {
   return name
@@ -52,7 +57,7 @@ export function parseAnswer(answer: string | null | undefined, check?: CitationC
       }
       if (last < para.length) segments.push({ kind: 'text', text: para.slice(last) });
       const hasCitation = segments.some((s) => s.kind === 'citation');
-      return { kind: hasCitation ? 'policy' : 'general', segments } as AnswerParagraph;
+      return { kind: hasCitation ? 'policy' : 'general', segments, heading: !hasCitation && HEADING.test(para) } as AnswerParagraph;
     });
 }
 

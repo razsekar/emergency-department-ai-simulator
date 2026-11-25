@@ -18,6 +18,7 @@ from app.modules.ai_orchestration.application import comparison_contracts as cc
 from app.modules.ai_orchestration.application.agent import AgentOutcome, AgentRunner, _render_for_fallback
 from app.modules.ai_orchestration.application.ports import LlmPort
 from app.modules.ai_orchestration.application.service import _policies, _tool_view
+from app.modules.ai_orchestration.application.briefing import assess, build_briefing
 from app.modules.ai_orchestration.application.snapshot import Snapshot, take_snapshot
 from app.modules.ai_orchestration.domain import prompts
 from app.modules.ai_orchestration.domain.citations import RetrievedRef
@@ -100,7 +101,8 @@ class ComparisonService:
 
         policies = _policies(results)
         retrieved = [RetrievedRef(p["document_name"], p["page"]) for p in policies if not p["flagged"]]
-        messages = self._shared_messages(question, results)
+        # The same verified briefing (scenario, data version, computed level) goes to every model, inside the hashed prompt.
+        messages = self._shared_messages(question, results, build_briefing(snapshot, assess(snapshot)))
         shared_hash = _sha256(messages)
 
         rows: list[dict[str, Any]] = []
@@ -166,9 +168,11 @@ class ComparisonService:
             )
 
     @staticmethod
-    def _shared_messages(question: str, results) -> list[ChatMessage]:
+    def _shared_messages(question: str, results, briefing: str | None = None) -> list[ChatMessage]:
         body = "\n\n".join(_render_for_fallback(r) for r in results)
-        user = f"Question: {question}\n\nVerified tool results (fetched just now from the live simulation):\n\n{body}"
+        lead = f"{briefing}\n\n" if briefing else ""
+        user = (f"{lead}Question: {question}\n\n"
+                f"Verified tool results (fetched just now from the live simulation):\n\n{body}")
         return [ChatMessage(role="system", content=prompts.FALLBACK_SYSTEM_PROMPT),
                 ChatMessage(role="user", content=user)]
 

@@ -106,11 +106,13 @@ import { formatMetric, labelFromKey, parseAnswer, prettyJson } from './answer-pa
     } @else {
       <div class="legend">
         <span class="lg policy">Cites retrieved policy</span>
-        <span class="lg general">General explanation, not policy</span>
+        <span class="lg general">No policy citation</span>
       </div>
       @for (p of paragraphs(); track $index) {
         <p class="para" [attr.data-kind]="p.kind">
-          <span class="kind">{{ p.kind === 'policy' ? 'Policy-backed' : 'General explanation' }}</span>
+          @if (!p.heading) {
+            <span class="kind">{{ p.kind === 'policy' ? 'Policy-backed' : 'No policy citation' }}</span>
+          }
           @for (s of p.segments; track $index) {
             @if (s.kind === 'citation') {
               <span class="cite" [attr.data-verified]="s.verified" [title]="s.verified ? 'Matches a retrieved document and page' : 'Not found among the retrieved sources'">

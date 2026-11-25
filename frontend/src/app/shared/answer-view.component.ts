@@ -4,7 +4,7 @@ import { AnswerParagraph, parseAnswer } from '../features/agent/answer-parser';
 
 /**
  * Renders a model answer with policy-backed paragraphs (those carrying a [Source: …] marker) visibly distinct from
- * general explanation. Citation chips show the backend's verification result. When no backend check is available
+ * uncited text. Citation chips show the backend's verification result. When no backend check is available
  * (`check` is null) the chips are neutral: the frontend never decides on its own whether a citation is real.
  */
 @Component({
@@ -16,7 +16,9 @@ import { AnswerParagraph, parseAnswer } from '../features/agent/answer-parser';
     } @else {
       @for (p of paragraphs(); track $index) {
         <div class="para" [attr.data-kind]="p.kind" [attr.data-state]="paragraphState(p)">
-          <span class="tag">{{ tagFor(p) }}</span>
+          @if (!p.heading) {
+            <span class="tag">{{ tagFor(p) }}</span>
+          }
           <p>
             @for (s of p.segments; track $index) {
               @if (s.kind === 'citation') {
@@ -49,7 +51,7 @@ export class AnswerView {
 
   protected readonly paragraphs = computed(() => parseAnswer(this.answer(), this.check()));
 
-  /** general paragraphs have no state; cited ones are ok / bad / unknown according to the backend's check. */
+  /** uncited paragraphs have no state; cited ones are ok / bad / unknown according to the backend's check. */
   protected paragraphState(p: AnswerParagraph): 'none' | 'ok' | 'bad' | 'unknown' {
     if (p.kind === 'general') return 'none';
     const cites = p.segments.filter((s) => s.kind === 'citation');
@@ -66,7 +68,8 @@ export class AnswerView {
       case 'unknown':
         return 'Cites a policy (not checked here)';
       default:
-        return 'General explanation (not from policy)';
+        // All the app knows: no [Source] marker. The text may be live data, so do not call it a general explanation.
+        return 'No policy citation';
     }
   }
 

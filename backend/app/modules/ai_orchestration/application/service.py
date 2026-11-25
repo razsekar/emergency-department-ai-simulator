@@ -11,6 +11,7 @@ from app.modules.agent_tools.public import ToolResult
 from app.modules.ai_orchestration.application import contracts as c
 from app.modules.ai_orchestration.application.agent import AgentFailure, AgentIncomplete, AgentOutcome, AgentRunner
 from app.modules.ai_orchestration.application.ports import LlmPort
+from app.modules.ai_orchestration.application.briefing import assess, build_briefing
 from app.modules.ai_orchestration.application.snapshot import take_snapshot
 from app.modules.ai_orchestration.domain.citations import RetrievedRef, check_citations
 from app.modules.ai_orchestration.domain.prompts import FIXED_DEMO_QUESTION
@@ -86,7 +87,8 @@ class AgentService:
         error_to_raise: Exception | None = None
         try:
             outcome = self._runner.run(question=question, provider=provider, model=model, temperature=temperature,
-                                       mode=mode, run_id=run_id)
+                                       mode=mode, run_id=run_id,
+                                       briefing=build_briefing(snapshot, assess(snapshot)))
         except AgentFailure as fail:
             outcome = fail.outcome  # keep the tools that did run and the tokens already spent
             if isinstance(fail.cause, ProviderCallError):

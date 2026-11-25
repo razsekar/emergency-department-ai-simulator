@@ -20,6 +20,7 @@ from app.modules.model_providers.application.contracts import (
 )
 from app.modules.model_providers.domain.providers import SPECS, Provider
 from app.modules.model_providers.infrastructure import env_config
+from app.platform.config import get_settings
 
 log = logging.getLogger("app.model_providers.litellm")
 
@@ -95,6 +96,7 @@ class LiteLlmGateway:
             kw["api_key"] = key
         if spec.provider is Provider.OLLAMA:
             kw["api_base"] = env_config.ollama_base_url()
+            kw["num_ctx"] = get_settings().ollama_num_ctx  # else Ollama truncates long prompts at 4096 without an error
         temp_applied = True
         if req.temperature is not None:
             if _supports_temperature(req.provider, req.model):
@@ -103,6 +105,7 @@ class LiteLlmGateway:
                 temp_applied = False
         if req.max_tokens:
             kw["max_tokens"] = req.max_tokens
+        kw["timeout"] = get_settings().llm_timeout_seconds
         if req.tools:
             kw["tools"] = req.tools
             if req.tool_choice:

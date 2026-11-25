@@ -45,7 +45,7 @@ interface Turn {
         <span>
           Each answer is written from <strong>retrieved policy excerpts</strong> and a fresh live-data snapshot. Excerpts are
           listed under the answer; the backend checks every <em>[Source: …]</em> citation against what was retrieved.
-          Text without a citation is the model's general explanation, not hospital policy.
+          Text without a citation has no policy source: do not treat it as hospital policy.
         </span>
       </div>
     } @else {

@@ -116,6 +116,8 @@ Open risks (**UNVERIFIED**, test before a live session):
   The API should send `Cache-Control: no-store` on live-data endpoints; this is not currently verified or set.
 
 ## 5. Ollama
+With the compose `ollama` profile set `OLLAMA_BASE_URL=http://ollama:11434`. Also see `OLLAMA_NUM_CTX`, `LLM_TIMEOUT_SECONDS` and `AGENT_MAX_OUTPUT_TOKENS` in `.env.example`; CPU inference is slow (minutes per answer).
+
 Ollama is local or separately hosted. **A Railway/cloud backend cannot reach `localhost:11434` on your laptop.** For a cloud
 backend either host Ollama on a reachable server and set `OLLAMA_BASE_URL`, or use a cloud provider. Locally in Docker Compose the
 default `http://host.docker.internal:11434` reaches an Ollama running on the host (works on Docker Desktop/Colima on macOS; Linux needs an `extra_hosts` mapping).

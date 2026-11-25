@@ -14,6 +14,14 @@ class Settings(BaseSettings):
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:4200"])
     log_level: str = "INFO"
 
+    # LLM call limits. A small local model on CPU (Ollama) can take many minutes per answer, so the
+    # timeout is generous; the output cap bounds the final answer so one call cannot run away.
+    # Ollama silently TRUNCATES the start of a prompt that exceeds its context window (default 4096), which
+    # drops the system rules, briefing and question. The agent prompt is ~4-5k tokens, so ask for more.
+    ollama_num_ctx: int = Field(default=8192, ge=2048, le=131072)
+    llm_timeout_seconds: int = Field(default=1200, ge=10, le=7200)
+    agent_max_output_tokens: int = Field(default=1200, ge=64, le=32000)
+
     # Request body cap (MB), enforced from Content-Length before the body is read. It must stay a
     # little above KB_MAX_UPLOAD_MB (default 10) to leave room for multipart overhead.
     max_request_body_mb: int = Field(default=12, ge=1, le=1024)

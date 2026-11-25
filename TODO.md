@@ -41,7 +41,8 @@ Items are checked only when implemented AND verified (evidence in brackets).
 ## Phase 6: Agentic AI
 - [x] 7 tools, bounded 5-call loop, fallback mode, citation check, run history, demo-run endpoint, chat [302 backend tests pass; scripted fake LLM only]
 - [x] /api/agent/* served by the real app after rebuild [401 without token via nginx proxy]
-- [ ] Real LLM run (needs your API key or local Ollama model): NOT verified
+- [x] Real LLM run via Ollama llama3.2:3b, Demo Mode x3 [levels GREEN/RED/GREEN, data-correct, 348/347/415 s]
+- [ ] Real run with a cloud model and the Agent screen in a browser: NOT verified
 - [ ] Agent Execution screen (frontend)
 
 ## Frontend screens (done, verified by agents + 69 unit tests)
@@ -69,7 +70,15 @@ Items are checked only when implemented AND verified (evidence in brackets).
 - [ ] Docs re-checked after hardening (in progress)
 - [ ] Clean-start Docker verification (`down -v` then `up`): NOT done
 - [ ] Real login + seeded demo users: needs JWT_SECRET and DEMO_*_PASSWORD in .env (user)
-- [ ] Real LLM end-to-end demo run: NOT verified (needs a provider key or Ollama model)
+- [x] Deterministic escalation level + verified briefing in agent and comparison prompts [582 backend tests pass]
+- [x] Ollama context truncation fixed (`OLLAMA_NUM_CTX`), LLM timeout and output cap [tests + real run]
+- [ ] Show the computed level in the Demo/Agent screens (backend does not expose it in the API yet)
+- [x] Two-model comparison (llama3.2:1b and 3b) and Demo/Agent/Assistant screens run in headless Chrome [2026-11-25]
+- [x] nginx proxy timeout raised to 3600 s (UI returned 504 at 300 s) [UI requests of 340-572 s succeeded]
+- [x] Comparison accuracy false positives fixed (ratio lines, quoted policy limits) [600 backend tests; 2 saved real answers rescored with no false wrong numbers]
+- [x] Uncited paragraphs labelled "No policy citation", headings untagged, comparison disclaimer shown once [150 frontend tests]
+- [ ] Browser check of the scorer and label fixes
+- [ ] Cloud-model comparison: NOT verified
 - [ ] Deployment: unverified on Vercel/Railway; see DEPLOYMENT.md for the fixes needed (PORT, DATABASE_URL scheme, dev deps in image, sample_docs, model cache)
 
 ## Notes

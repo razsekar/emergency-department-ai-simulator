@@ -128,6 +128,9 @@ describe('AgentRunView', () => {
     const el = render();
     const kinds = [...el.querySelectorAll('.para')].map((p) => p.getAttribute('data-kind'));
     expect(kinds).toEqual(['policy', 'general', 'policy']);
+    const uncited = el.querySelector('.para[data-kind="general"] .kind');
+    expect(uncited?.textContent?.trim()).toBe('No policy citation');
+    expect(el.querySelector('.legend')?.textContent).toContain('No policy citation');
     const cites = [...el.querySelectorAll('.cite')];
     expect(cites[0].getAttribute('data-verified')).toBe('true');
     expect(cites[1].getAttribute('data-verified')).toBe('false');

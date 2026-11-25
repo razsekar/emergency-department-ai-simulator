@@ -112,6 +112,19 @@ def test_every_model_receives_the_identical_frozen_prompt(normal):
     assert res.question == "How is the ED?" and res.created_by == "t" and res.status == "completed"
 
 
+@pytest.mark.parametrize("scenario,level", [("normal", "GREEN"), ("surge", "RED"), ("recovery", "GREEN")])
+def test_every_model_gets_the_same_verified_briefing_with_the_computed_level(comparison_state, scenario, level):
+    """The system prompt tells models to use a VERIFIED BRIEFING, so the comparison must actually supply it."""
+    simulation.apply_scenario(scenario)
+    llm = PerModelLlm({"a": snapshot_answer(), "b": snapshot_answer()})
+    ComparisonService(llm).run(question="How is the ED?", selections=[sel("a"), sel("b")], actor="t")
+
+    users = [next(m.content for m in r.messages if m.role == "user") for r in llm.requests]
+    assert users[0] == users[1]
+    assert users[0].startswith("VERIFIED BRIEFING") and f"Operating level: {level}" in users[0]
+    assert "Data version:" in users[0] and "Scenario:" in users[0]
+
+
 def test_tools_run_once_not_once_per_model(normal, comparison_state):
     llm = PerModelLlm({"a": snapshot_answer(), "b": snapshot_answer()})
     ComparisonService(llm).run(question="Q?", selections=[sel("a"), sel("b")])

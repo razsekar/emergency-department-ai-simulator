@@ -58,6 +58,17 @@ describe('ComparisonPage', () => {
     expect(el.querySelector('[data-testid="demo-label"]')?.textContent).toContain('Demonstration comparison, not a formal benchmark.');
   });
 
+  it('shows the benchmark disclaimer once in the result, even though the backend note repeats it', async () => {
+    await setup(true);
+    await runWith({
+      ...comparisonRun(),
+      scoring_note: 'Demonstration comparison, not a formal benchmark. Scores come from simple automated heuristics.',
+    });
+    const note = el.querySelector('[data-testid="scoring-note"]')?.textContent ?? '';
+    expect(note.match(/not a formal benchmark/g)?.length).toBe(1);
+    expect(note).toContain('Scores come from simple automated heuristics.');
+  });
+
   it('disables unconfigured models with the reason and requires at least two selections', async () => {
     await setup(true);
     const boxes = checkboxes();

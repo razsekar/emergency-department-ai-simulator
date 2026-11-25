@@ -7,11 +7,16 @@ Everything on screen is invented; the policies are fictional. Say this at the st
 
 | Item | State |
 |---|---|
-| Stack starts, migrations apply, backend and frontend automated tests pass | Verified 2026-11-22 on the working tree with the security hardening: 522 backend, 148 frontend tests |
+| Stack starts, migrations apply, backend and frontend automated tests pass | Backend: 600 passed, frontend: 150 passed (2026-11-25) |
 | Scenario numbers below (12/38/9 waiting and so on) | Verified by backend tests and, for Surge and Normal, by a browser run against the real backend |
-| Demo Mode, Agent, Comparison and Assistant screens with a **real LLM** | **Never run.** Only scripted fake models and mocked API responses were used. |
+| Demo Mode backend with a **real LLM** (Ollama `llama3.2:3b`) | **Run 2026-11-22** (Normal, Surge, Recovery via the API with a real login): data, levels (GREEN/RED/GREEN) and citations correct; 6-7 minutes per answer on CPU. |
+| Demo Mode, Agent, AI Assistant and Comparison **screens** with Ollama | Run in headless Chrome 2026-11-25: all four completed, after raising the nginx timeout (300 s caused HTTP 504). Demo steps 6-7 min each, Agent about 6 min, Assistant 44 s, two-model comparison 9.5 min. |
+| Fixed after that run (automated tests; browser check pending) | Comparison accuracy no longer counts ratio lines or quoted policy limits as wrong numbers. Accuracy still counts unmentioned metrics against the score, so below 100% does not mean a number was wrong; comparisons saved before the fix keep their old scores. Uncited paragraphs now read "No policy citation". |
+| Known defects seen in that run | Agent did not directly answer a GREEN/AMBER/RED question. Assistant answer had no citation and contradicted itself. |
+| Cloud providers | **Never run.** |
 | Login and role checks against the running app | Anonymous requests were checked live (401 everywhere except health and login). A signed-in session on the running stack with your own `JWT_SECRET` and demo passwords has not been exercised by this guide; the automated tests cover login and roles. |
-| Ollama end to end | Not run |
+| Ollama end to end | Run for Demo Mode only (see above). Too slow on CPU to use live. |
+| Operating level in answers | The backend computes the level deterministically from the escalation rule (highest level with at least two indicators; one RED raises it to at least AMBER) and gives the model a verified briefing. The model is told not to recompute it. The briefing is not yet shown in the UI. |
 | Prompt-injection demo below | Idea only; detection is regex-based. Rehearse it. |
 
 **Do a complete rehearsal with your real provider at least a day before.** Treat anything not in the "verified" rows as unproven. Real model answers will vary in wording and quality.

@@ -24,7 +24,16 @@ retrieved. Never invent a citation. If no relevant policy was retrieved, say tha
 5. Keep the sections separate and labelled: "Current situation (from data)", "Bottlenecks and shortages", \
 "Waiting-time issues", "Relevant policy (retrieved)", "Recommended administrative actions" (suggestions for human \
 decision-makers, framed as options consistent with retrieved policy), and "General explanation (not from policy)".
-6. Mention the scenario name and data version you analysed.
+6. The user message starts with a VERIFIED BRIEFING computed by the application: the scenario name, the data \
+version and the operating level (GREEN, AMBER or RED) with an indicator table. State the scenario name and data \
+version once, and use that operating level exactly as given. Never recompute, soften or contradict the level, and never invent thresholds: \
+compare a number with a band only through the indicator table. Say which indicators drove the level.
+7. "Recommended administrative actions" is mandatory and must never be omitted. Base it on the retrieved policy for \
+the stated level: at GREEN, say that routine monitoring continues; at AMBER or RED, list the administrative \
+options the retrieved policy describes (staffing, beds, investigations, escalation to the duty manager). These are \
+suggestions for human decision-makers, not instructions.
+8. Write the answer for a manager. Do not repeat internal delimiters or labels such as "UNTRUSTED", and do not echo \
+the briefing verbatim; present policy under "Relevant policy (retrieved)".
 """
 
 FALLBACK_SYSTEM_PROMPT = """You are an operations analyst assistant for a SIMULATED emergency department. All data is \
@@ -41,7 +50,16 @@ retrieved context. Never invent a citation. If no relevant policy was retrieved,
 4. Keep the sections separate and labelled: "Current situation (from data)", "Bottlenecks and shortages", \
 "Waiting-time issues", "Relevant policy (retrieved)", "Recommended administrative actions" (suggestions for human \
 decision-makers, consistent with retrieved policy), and "General explanation (not from policy)".
-5. Mention the scenario name and data version you analysed.
+5. The user message starts with a VERIFIED BRIEFING computed by the application: the scenario name, the data \
+version and the operating level (GREEN, AMBER or RED) with an indicator table. State the scenario name and data \
+version once, and use that operating level exactly as given. Never recompute, soften or contradict the level, and never invent thresholds: \
+compare a number with a band only through the indicator table. Say which indicators drove the level.
+6. "Recommended administrative actions" is mandatory and must never be omitted. Base it on the retrieved policy for \
+the stated level: at GREEN, say that routine monitoring continues; at AMBER or RED, list the administrative \
+options the retrieved policy describes (staffing, beds, investigations, escalation to the duty manager). These are \
+suggestions for human decision-makers, not instructions.
+7. Write the answer for a manager. Do not repeat internal delimiters or labels such as "UNTRUSTED", and do not echo \
+the briefing verbatim; present policy under "Relevant policy (retrieved)".
 """
 
 CHAT_SYSTEM_PROMPT = """You are an assistant for a SIMULATED emergency department operations training tool. All data \
